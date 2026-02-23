@@ -42,75 +42,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 .lg-row{display:flex;align-items:center;margin-bottom:1px}
 .lg-c{width:14px;height:8px;border-radius:2px;margin-right:4px}
 
-/* ===== FPS Mode ===== */
-.fps-overlay{
-  display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;
-  pointer-events:none;
-}
-.fps-overlay.active{display:block}
-.fps-hud{width:100%;height:100%;position:relative}
-
-.fps-crosshair{
-  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  font-size:28px;color:rgba(255,255,255,0.6);
-  text-shadow:0 0 4px rgba(0,0,0,0.8);pointer-events:none;
-  font-family:monospace;
-}
-
-.fps-controls{
-  position:absolute;top:10px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);
-  color:#fff;border-radius:10px;padding:10px 16px;
-  text-align:center;font-size:11px;pointer-events:none;
-  transition:opacity 1s;
-}
-.fps-keys{display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:6px}
-.fps-key-row{display:flex;gap:4px}
-.fps-key-row kbd{
-  background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);
-  border-radius:4px;padding:2px 8px;font-size:12px;font-family:monospace;
-}
-.fps-info{display:flex;flex-direction:column;gap:2px;opacity:0.7}
-
-.fps-coords{
-  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,0.65);color:#4CAF50;
-  font-family:monospace;font-size:12px;font-weight:700;
-  border-radius:6px;padding:4px 12px;pointer-events:none;
-}
-
-.fps-exit{
-  position:absolute;top:10px;right:10px;
-  background:rgba(0,0,0,0.7);color:#fff;border:1px solid rgba(255,255,255,0.2);
-  border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;
-  cursor:pointer;pointer-events:auto;
-  transition:background .2s;
-}
-.fps-exit:hover{background:rgba(244,67,54,0.8)}
-
-/* Mobile D-pad */
-.fps-mobile-pad{
-  display:none;
-  position:absolute;bottom:30px;left:24px;
-  width:130px;height:130px;pointer-events:auto;
-}
-@media(max-width:768px){
-  .fps-mobile-pad{display:block}
-  .fps-controls .fps-keys{display:none}
-}
-.pad-btn{
-  position:absolute;width:42px;height:42px;border-radius:50%;
-  background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.3);
-  color:#fff;font-size:16px;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;-webkit-tap-highlight-color:transparent;
-  user-select:none;
-}
-.pad-btn:active{background:rgba(255,255,255,0.35)}
-.pad-up{top:0;left:50%;transform:translateX(-50%)}
-.pad-down{bottom:0;left:50%;transform:translateX(-50%)}
-.pad-left{top:50%;left:0;transform:translateY(-50%)}
-.pad-right{top:50%;right:0;transform:translateY(-50%)}
+/* FPS mode removed */
 
 /* Floating station markers */
 .floating-station{
@@ -202,38 +134,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <button class="fab fab-locate" id="btnLocate" title="내 위치">📍</button>
   <button class="fab" id="btnReset" title="전체보기">↺</button>
   <button class="fab" id="btn3dToggle" title="3D/2D 전환">🏔️</button>
-  <button class="fab" id="btnFps" title="1인칭 모드" style="background:#222;color:#4CAF50;font-size:14px;font-weight:800">FPS</button>
   <button class="fab" id="btnMinecraft" title="마인크래프트 모드" style="background:#5D8A3C;color:#fff;font-size:13px;font-weight:800">MC</button>
 </div>
 
 <div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 & 기울이기</div>
-
-<!-- FPS mode overlay -->
-<div class="fps-overlay" id="fpsOverlay">
-  <div class="fps-hud">
-    <div class="fps-crosshair">+</div>
-    <div class="fps-controls" id="fpsControls">
-      <div class="fps-keys">
-        <div class="fps-key-row"><kbd>W</kbd></div>
-        <div class="fps-key-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
-      </div>
-      <div class="fps-info">
-        <span>이동: WASD</span>
-        <span>시점: 마우스/드래그</span>
-        <span>높이: Q/E</span>
-        <span>속도: Shift=빠르게</span>
-      </div>
-    </div>
-    <div class="fps-coords" id="fpsCoords"></div>
-    <div class="fps-mobile-pad" id="fpsPad">
-      <button class="pad-btn pad-up" data-dir="forward">▲</button>
-      <button class="pad-btn pad-left" data-dir="left">◀</button>
-      <button class="pad-btn pad-right" data-dir="right">▶</button>
-      <button class="pad-btn pad-down" data-dir="backward">▼</button>
-    </div>
-    <button class="fps-exit" id="fpsExit">✕ 나가기</button>
-  </div>
-</div>
 
 <!-- Minecraft mode -->
 <div id="mcOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:#87CEEB">
@@ -816,123 +720,6 @@ if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(p => {
     addLocMarker([p.coords.longitude, p.coords.latitude]);
   }, () => {}, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
-}
-
-// ===== FPS MODE =====
-let fpsActive = false;
-let fpsKeys = {};
-let fpsRaf = null;
-let savedView = null;
-
-document.getElementById('btnFps').addEventListener('click', enterFps);
-document.getElementById('fpsExit').addEventListener('click', exitFps);
-
-function enterFps() {
-  fpsActive = true;
-  // Save current view
-  savedView = { center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
-
-  // Set FPS camera
-  map.setTerrain({ source: 'terrain-dem', exaggeration: 4.0 });
-  map.easeTo({ pitch: 70, zoom: 17.5, duration: 600 });
-
-  document.getElementById('fpsOverlay').classList.add('active');
-
-  // Hide other UI
-  document.querySelectorAll('.top-bar,.legend-bar,.fab-col,.ctrl-panel').forEach(el => el.style.display = 'none');
-
-  // Fade out help after 5s
-  setTimeout(() => {
-    const c = document.getElementById('fpsControls');
-    if (c) c.style.opacity = '0';
-  }, 5000);
-
-  // Start loop
-  fpsLoop();
-}
-
-function exitFps() {
-  fpsActive = false;
-  document.getElementById('fpsOverlay').classList.remove('active');
-  document.querySelectorAll('.top-bar,.legend-bar,.ctrl-panel').forEach(el => el.style.display = '');
-  document.querySelectorAll('.fab-col').forEach(el => el.style.display = 'flex');
-  document.getElementById('fpsControls').style.opacity = '1';
-
-  if (savedView) {
-    map.easeTo({ center: savedView.center, zoom: savedView.zoom, pitch: savedView.pitch, bearing: savedView.bearing, duration: 600 });
-  }
-  if (fpsRaf) cancelAnimationFrame(fpsRaf);
-}
-
-// Keyboard
-document.addEventListener('keydown', e => {
-  if (!fpsActive) return;
-  fpsKeys[e.key.toLowerCase()] = true;
-  if (e.key === 'Escape') exitFps();
-});
-document.addEventListener('keyup', e => {
-  fpsKeys[e.key.toLowerCase()] = false;
-});
-
-// Mobile D-pad
-document.querySelectorAll('.pad-btn').forEach(btn => {
-  const dir = btn.dataset.dir;
-  const setKey = (val) => {
-    if (dir === 'forward') fpsKeys['w'] = val;
-    if (dir === 'backward') fpsKeys['s'] = val;
-    if (dir === 'left') fpsKeys['a'] = val;
-    if (dir === 'right') fpsKeys['d'] = val;
-  };
-  btn.addEventListener('touchstart', e => { e.preventDefault(); setKey(true); });
-  btn.addEventListener('touchend', e => { e.preventDefault(); setKey(false); });
-  btn.addEventListener('mousedown', () => setKey(true));
-  btn.addEventListener('mouseup', () => setKey(false));
-  btn.addEventListener('mouseleave', () => setKey(false));
-});
-
-function fpsLoop() {
-  if (!fpsActive) return;
-
-  const speed = fpsKeys['shift'] ? 0.0006 : 0.00015;
-  const bearing = map.getBearing() * Math.PI / 180;
-  const center = map.getCenter();
-  let lng = center.lng, lat = center.lat;
-
-  // Forward/backward (relative to bearing)
-  if (fpsKeys['w'] || fpsKeys['arrowup']) {
-    lng += Math.sin(bearing) * speed;
-    lat += Math.cos(bearing) * speed;
-  }
-  if (fpsKeys['s'] || fpsKeys['arrowdown']) {
-    lng -= Math.sin(bearing) * speed;
-    lat -= Math.cos(bearing) * speed;
-  }
-  // Strafe left/right
-  if (fpsKeys['a'] || fpsKeys['arrowleft']) {
-    lng -= Math.cos(bearing) * speed;
-    lat += Math.sin(bearing) * speed;
-  }
-  if (fpsKeys['d'] || fpsKeys['arrowright']) {
-    lng += Math.cos(bearing) * speed;
-    lat -= Math.sin(bearing) * speed;
-  }
-  // Height (zoom)
-  let zoom = map.getZoom();
-  if (fpsKeys['q']) zoom = Math.min(20, zoom + 0.02);
-  if (fpsKeys['e']) zoom = Math.max(14, zoom - 0.02);
-
-  // Rotate with R/F or mouse drag is handled by MapLibre natively
-  let pitch = map.getPitch();
-  if (fpsKeys['r']) pitch = Math.min(85, pitch + 0.5);
-  if (fpsKeys['f']) pitch = Math.max(30, pitch - 0.5);
-
-  map.jumpTo({ center: [lng, lat], zoom, pitch });
-
-  // Update coords HUD
-  document.getElementById('fpsCoords').textContent =
-    `${lat.toFixed(4)}, ${lng.toFixed(4)} | 줌:${zoom.toFixed(1)} | 방향:${(map.getBearing()).toFixed(0)}°`;
-
-  fpsRaf = requestAnimationFrame(fpsLoop);
 }
 
 // ===== MINECRAFT VOXEL MODE =====

@@ -10,237 +10,297 @@
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 #map { width: 100%; height: 100vh; }
 
-.info-panel {
+.control-panel {
   position: absolute;
   top: 10px;
-  right: 10px;
+  left: 50px;
   z-index: 1000;
-  background: rgba(255,255,255,0.95);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-  max-width: 280px;
-  font-size: 14px;
+  background: rgba(255,255,255,0.96);
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  font-size: 13px;
+  max-width: 220px;
 }
-.info-panel h2 {
-  font-size: 16px;
-  margin-bottom: 8px;
-  color: #333;
+.control-panel h3 { font-size: 15px; margin-bottom: 6px; }
+.control-panel label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+  cursor: pointer;
+  font-size: 12.5px;
 }
-.info-panel p {
-  color: #666;
-  line-height: 1.5;
-  margin-bottom: 6px;
-}
+.control-panel hr { border: none; border-top: 1px solid #eee; margin: 6px 0; }
 
-.elevation-display {
+.elevation-bar {
   position: absolute;
-  bottom: 30px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  background: rgba(0,0,0,0.8);
+  background: rgba(0,0,0,0.82);
   color: #fff;
-  border-radius: 8px;
-  padding: 10px 20px;
-  font-size: 15px;
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-size: 14px;
   font-weight: 500;
   display: none;
   white-space: nowrap;
+  backdrop-filter: blur(6px);
 }
+
+.my-location-btn {
+  position: absolute;
+  bottom: 70px;
+  right: 12px;
+  z-index: 1000;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.my-location-btn:hover { background: #f0f0f0; }
+.my-location-btn:active { background: #e0e0e0; }
 
 .legend {
   position: absolute;
-  bottom: 30px;
-  right: 10px;
+  bottom: 20px;
+  right: 12px;
   z-index: 1000;
-  background: rgba(255,255,255,0.95);
-  border-radius: 10px;
-  padding: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-  font-size: 12px;
+  background: rgba(255,255,255,0.96);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  font-size: 11px;
 }
-.legend h4 { margin-bottom: 6px; font-size: 13px; }
-.legend-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 3px;
-}
+.legend h4 { font-size: 12px; margin-bottom: 4px; }
+.legend-item { display: flex; align-items: center; margin-bottom: 2px; }
 .legend-color {
-  width: 24px;
-  height: 14px;
-  border-radius: 3px;
-  margin-right: 6px;
-  border: 1px solid rgba(0,0,0,0.1);
+  width: 18px; height: 10px; border-radius: 2px;
+  margin-right: 5px; border: 1px solid rgba(0,0,0,0.08);
 }
 
-.layer-control {
-  position: absolute;
-  top: 10px;
-  left: 60px;
-  z-index: 1000;
-  background: rgba(255,255,255,0.95);
-  border-radius: 10px;
-  padding: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-  font-size: 13px;
+/* Station label styling */
+.station-label {
+  background: rgba(255,255,255,0.92);
+  border: 1.5px solid;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  line-height: 1.4;
 }
-.layer-control label {
-  display: block;
-  margin-bottom: 4px;
-  cursor: pointer;
+.line-2 { border-color: #33A23D; color: #33A23D; }
+.line-3 { border-color: #FE5B10; color: #FE5B10; }
+.line-7 { border-color: #6E8B2D; color: #6E8B2D; }
+.line-9 { border-color: #AA9872; color: #AA9872; }
+.line-sh { border-color: #A71E31; color: #A71E31; }
+.line-bx { border-color: #7C4A2F; color: #7C4A2F; }
+.line-su { border-color: #FFD400; color: #b39500; }
+
+.hill-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8B4513;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+  white-space: nowrap;
 }
-.layer-control input { margin-right: 6px; }
+
+/* Pulse animation for current location */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(66,133,244,0.5); }
+  70% { box-shadow: 0 0 0 15px rgba(66,133,244,0); }
+  100% { box-shadow: 0 0 0 0 rgba(66,133,244,0); }
+}
+.loc-pulse {
+  width: 16px; height: 16px;
+  background: #4285F4;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(66,133,244,0.5);
+  animation: pulse 2s infinite;
+}
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<div class="info-panel">
-  <h2>🏔️ 강남구 고도 지도</h2>
-  <p>등고선과 음영기복이 표시된 강남구 지형도입니다.</p>
-  <p>🖱️ 지도를 클릭하면 해당 지점의 고도를 확인할 수 있습니다.</p>
-  <p style="font-size:12px;color:#999;">데이터: OpenTopoMap, OpenStreetMap, Open-Elevation API</p>
-</div>
-
-<div class="layer-control">
-  <strong>🗺️ 레이어</strong>
+<div class="control-panel">
+  <h3>🏔️ 강남구 고도 지도</h3>
+  <hr>
   <label><input type="radio" name="base" value="topo" checked> 등고선 지형도</label>
   <label><input type="radio" name="base" value="osm"> 일반 지도</label>
   <label><input type="radio" name="base" value="satellite"> 위성 지도</label>
-  <hr style="margin:6px 0">
-  <label><input type="checkbox" id="hillshade" checked> 음영기복 (Hillshade)</label>
-  <label><input type="checkbox" id="contours" checked> 등고선 강조</label>
-  <label><input type="checkbox" id="markers" checked> 주요 언덕 마커</label>
+  <hr>
+  <label><input type="checkbox" id="hillshade" checked> 음영기복</label>
+  <label><input type="checkbox" id="stations" checked> 🚇 지하철역</label>
+  <label><input type="checkbox" id="markers" checked> ⛰️ 주요 언덕</label>
 </div>
 
-<div class="elevation-display" id="elevationDisplay"></div>
+<button class="my-location-btn" id="locateBtn" title="내 위치">📍</button>
+
+<div class="elevation-bar" id="elevationDisplay"></div>
 
 <div class="legend">
-  <h4>고도 범위</h4>
-  <div class="legend-item"><div class="legend-color" style="background:#1a9850"></div> 0~20m (저지대)</div>
-  <div class="legend-item"><div class="legend-color" style="background:#91cf60"></div> 20~40m</div>
-  <div class="legend-item"><div class="legend-color" style="background:#d9ef8b"></div> 40~60m</div>
-  <div class="legend-item"><div class="legend-color" style="background:#fee08b"></div> 60~100m</div>
-  <div class="legend-item"><div class="legend-color" style="background:#fc8d59"></div> 100~150m</div>
-  <div class="legend-item"><div class="legend-color" style="background:#d73027"></div> 150m+ (고지대)</div>
+  <h4>고도</h4>
+  <div class="legend-item"><div class="legend-color" style="background:#1a9850"></div>0~20m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#91cf60"></div>20~40m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#fee08b"></div>40~80m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#fc8d59"></div>80~150m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#d73027"></div>150m+</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// Gangnam-gu bounds
-const gangnamCenter = [37.4975, 127.0475];
+const gangnamCenter = [37.497, 127.047];
 const gangnamBounds = [[37.464, 127.012], [37.532, 127.105]];
 
-// Base layers
+// --- Base Layers ---
 const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-  maxZoom: 17,
-  attribution: '© OpenTopoMap (CC-BY-SA)'
+  maxZoom: 17, attribution: '© OpenTopoMap'
 });
-
 const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '© OpenStreetMap contributors'
+  maxZoom: 19, attribution: '© OSM'
 });
-
 const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 18,
-  attribution: '© Esri'
+  maxZoom: 18, attribution: '© Esri'
 });
-
-// Hillshade overlay - using Thunderforest-like or Stamen terrain
 const hillshadeLayer = L.tileLayer('https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png', {
-  maxZoom: 17,
-  opacity: 0.45,
-  attribution: '© Hillshading SRTM'
+  maxZoom: 17, opacity: 0.4
 });
 
-// Contour overlay (OpenTopoMap on top of other bases for contour lines)
-const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-  maxZoom: 17,
-  opacity: 0.35,
-  attribution: ''
-});
-
-// Init map
+// --- Map ---
 const map = L.map('map', {
   center: gangnamCenter,
   zoom: 14,
-  layers: [topoLayer, hillshadeLayer]
+  layers: [topoLayer, hillshadeLayer],
+  zoomControl: true
 });
+map.fitBounds(gangnamBounds, { padding: [10, 10] });
 
-// Gangnam-gu boundary highlight
-const gangnamOutline = L.rectangle(gangnamBounds, {
-  color: '#e74c3c',
-  weight: 2,
-  fill: false,
-  dashArray: '8,4',
-  opacity: 0.6
-}).addTo(map);
-
-// Notable hills/elevated areas in Gangnam-gu
-const hills = [
-  { name: '대모산 (大母山)', lat: 37.4730, lng: 127.0830, elev: '293m', desc: '강남구 최고봉, 수서동' },
-  { name: '구룡산 (九龍山)', lat: 37.4785, lng: 127.0620, elev: '306m', desc: '개포동, 등산로 인기' },
-  { name: '우면산 (牛眠山)', lat: 37.4780, lng: 127.0080, elev: '293m', desc: '서초구 경계, 예술의전당 뒤' },
-  { name: '매봉산', lat: 37.4910, lng: 127.0450, elev: '101m', desc: '도곡동, 매봉역 인근' },
-  { name: '달터근린공원', lat: 37.5080, lng: 127.0520, elev: '60m', desc: '삼성동 언덕' },
-  { name: '언주로 일대 (역삼동 언덕)', lat: 37.5010, lng: 127.0380, elev: '45m', desc: '역삼동 내 구릉지' },
-  { name: '일원동 구릉지', lat: 37.4830, lng: 127.0900, elev: '80m', desc: '삼성서울병원 인근 고지대' },
-  { name: '세곡동 구릉', lat: 37.4680, lng: 127.0700, elev: '120m', desc: '세곡동 남부 구릉' },
-  { name: '수서동 고지대', lat: 37.4870, lng: 127.1010, elev: '90m', desc: 'SRT수서역 동쪽 언덕' },
+// --- Subway Stations in/near Gangnam-gu ---
+const stations = [
+  // Line 2 (green)
+  { name: '강남', lat: 37.4979, lng: 127.0276, line: '2', cls: 'line-2' },
+  { name: '역삼', lat: 37.5007, lng: 127.0366, line: '2', cls: 'line-2' },
+  { name: '선릉', lat: 37.5045, lng: 127.0490, line: '2', cls: 'line-2' },
+  { name: '삼성', lat: 37.5088, lng: 127.0639, line: '2', cls: 'line-2' },
+  { name: '종합운동장', lat: 37.5107, lng: 127.0736, line: '2', cls: 'line-2' },
+  { name: '잠실새내', lat: 37.5116, lng: 127.0862, line: '2', cls: 'line-2' },
+  { name: '교대', lat: 37.4934, lng: 127.0146, line: '2', cls: 'line-2' },
+  // Line 3 (orange)
+  { name: '압구정', lat: 37.5270, lng: 127.0286, line: '3', cls: 'line-3' },
+  { name: '신사', lat: 37.5164, lng: 127.0203, line: '3', cls: 'line-3' },
+  { name: '잠원', lat: 37.5112, lng: 127.0155, line: '3', cls: 'line-3' },
+  { name: '매봉', lat: 37.4874, lng: 127.0347, line: '3', cls: 'line-3' },
+  { name: '도곡', lat: 37.4915, lng: 127.0455, line: '3', cls: 'line-3' },
+  { name: '대치', lat: 37.4948, lng: 127.0577, line: '3', cls: 'line-3' },
+  { name: '학여울', lat: 37.4965, lng: 127.0648, line: '3', cls: 'line-3' },
+  { name: '대청', lat: 37.4920, lng: 127.0744, line: '3', cls: 'line-3' },
+  { name: '일원', lat: 37.4836, lng: 127.0867, line: '3', cls: 'line-3' },
+  { name: '수서', lat: 37.4872, lng: 127.1017, line: '3', cls: 'line-3' },
+  // Line 7 (olive)
+  { name: '강남구청', lat: 37.5173, lng: 127.0413, line: '7', cls: 'line-7' },
+  { name: '청담', lat: 37.5196, lng: 127.0539, line: '7', cls: 'line-7' },
+  { name: '논현', lat: 37.5113, lng: 127.0215, line: '7', cls: 'line-7' },
+  { name: '학동', lat: 37.5146, lng: 127.0319, line: '7', cls: 'line-7' },
+  // Line 9 (gold)
+  { name: '봉은사', lat: 37.5140, lng: 127.0580, line: '9', cls: 'line-9' },
+  { name: '삼성중앙', lat: 37.5107, lng: 127.0660, line: '9', cls: 'line-9' },
+  { name: '선정릉', lat: 37.5104, lng: 127.0448, line: '9', cls: 'line-9' },
+  { name: '언주', lat: 37.5072, lng: 127.0340, line: '9', cls: 'line-9' },
+  { name: '신논현', lat: 37.5045, lng: 127.0253, line: '9', cls: 'line-9' },
+  // Shinbundang (red)
+  { name: '신사(신분당)', lat: 37.5164, lng: 127.0203, line: '신분당', cls: 'line-sh' },
+  { name: '강남(신분당)', lat: 37.4965, lng: 127.0284, line: '신분당', cls: 'line-sh' },
+  { name: '양재', lat: 37.4842, lng: 127.0352, line: '신분당', cls: 'line-sh' },
+  // Bundang (yellow)
+  { name: '선릉(분당)', lat: 37.5045, lng: 127.0490, line: '분당', cls: 'line-su' },
+  { name: '한티', lat: 37.4984, lng: 127.0561, line: '분당', cls: 'line-su' },
+  { name: '도곡(분당)', lat: 37.4915, lng: 127.0455, line: '분당', cls: 'line-su' },
+  { name: '구룡', lat: 37.4847, lng: 127.0538, line: '분당', cls: 'line-su' },
+  { name: '개포동', lat: 37.4787, lng: 127.0549, line: '분당', cls: 'line-su' },
+  { name: '대모산입구', lat: 37.4765, lng: 127.0772, line: '분당', cls: 'line-su' },
+  // SRT
+  { name: '수서(SRT)', lat: 37.4872, lng: 127.1017, line: 'SRT', cls: 'line-bx' },
 ];
 
-const hillIcon = L.divIcon({
-  html: '⛰️',
-  className: 'hill-marker',
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
+// Deduplicate stations at same location — show combined label
+const stationMap = new Map();
+stations.forEach(s => {
+  const key = `${s.lat.toFixed(3)},${s.lng.toFixed(3)}`;
+  if (!stationMap.has(key)) stationMap.set(key, s);
 });
 
-const markerGroup = L.layerGroup();
+const stationGroup = L.layerGroup();
+stationMap.forEach(s => {
+  const icon = L.divIcon({
+    html: `<div class="station-label ${s.cls}">🚇 ${s.name}</div>`,
+    className: '',
+    iconSize: null,
+    iconAnchor: [0, 0]
+  });
+  L.marker([s.lat, s.lng], { icon, interactive: false }).addTo(stationGroup);
+});
+stationGroup.addTo(map);
+
+// --- Hills ---
+const hills = [
+  { name: '대모산 293m', lat: 37.4730, lng: 127.0830 },
+  { name: '구룡산 306m', lat: 37.4785, lng: 127.0620 },
+  { name: '매봉산 101m', lat: 37.4910, lng: 127.0450 },
+  { name: '우면산 293m', lat: 37.4780, lng: 127.0080 },
+  { name: '세곡동 구릉 ~120m', lat: 37.4680, lng: 127.0700 },
+  { name: '일원동 구릉 ~80m', lat: 37.4830, lng: 127.0900 },
+];
+
+const hillGroup = L.layerGroup();
 hills.forEach(h => {
-  const marker = L.marker([h.lat, h.lng], { icon: hillIcon })
-    .bindPopup(`<strong>${h.name}</strong><br>고도: ${h.elev}<br>${h.desc}`);
-  markerGroup.addLayer(marker);
+  const icon = L.divIcon({
+    html: `<div class="hill-label">⛰️ ${h.name}</div>`,
+    className: '',
+    iconSize: null,
+    iconAnchor: [0, 8]
+  });
+  L.marker([h.lat, h.lng], { icon }).addTo(hillGroup);
 });
-markerGroup.addTo(map);
+hillGroup.addTo(map);
 
-// Layer switching
+// --- Layer Controls ---
 const baseLayers = { topo: topoLayer, osm: osmLayer, satellite: satelliteLayer };
 let currentBase = 'topo';
 
-document.querySelectorAll('input[name="base"]').forEach(radio => {
-  radio.addEventListener('change', e => {
+document.querySelectorAll('input[name="base"]').forEach(r => {
+  r.addEventListener('change', e => {
     map.removeLayer(baseLayers[currentBase]);
     currentBase = e.target.value;
     map.addLayer(baseLayers[currentBase]);
-    // Show contour overlay on non-topo bases
-    const contourCheckbox = document.getElementById('contours');
-    if (currentBase !== 'topo' && contourCheckbox.checked) {
-      if (!map.hasLayer(contourOverlay)) map.addLayer(contourOverlay);
-    } else {
-      if (map.hasLayer(contourOverlay)) map.removeLayer(contourOverlay);
-    }
   });
 });
 
 document.getElementById('hillshade').addEventListener('change', e => {
   e.target.checked ? map.addLayer(hillshadeLayer) : map.removeLayer(hillshadeLayer);
 });
-
-document.getElementById('contours').addEventListener('change', e => {
-  if (currentBase !== 'topo') {
-    e.target.checked ? map.addLayer(contourOverlay) : map.removeLayer(contourOverlay);
-  }
+document.getElementById('stations').addEventListener('change', e => {
+  e.target.checked ? map.addLayer(stationGroup) : map.removeLayer(stationGroup);
 });
-
 document.getElementById('markers').addEventListener('change', e => {
-  e.target.checked ? map.addLayer(markerGroup) : map.removeLayer(markerGroup);
+  e.target.checked ? map.addLayer(hillGroup) : map.removeLayer(hillGroup);
 });
 
-// Click to get elevation
+// --- Click Elevation ---
 const elevDisplay = document.getElementById('elevationDisplay');
 let elevMarker = null;
 
@@ -251,22 +311,74 @@ map.on('click', async (e) => {
 
   if (elevMarker) map.removeLayer(elevMarker);
   elevMarker = L.circleMarker([lat, lng], {
-    radius: 6, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 0.8
+    radius: 5, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 0.9, weight: 2
   }).addTo(map);
 
   try {
     const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`);
     const data = await res.json();
     const elev = data.results[0].elevation;
-    elevDisplay.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — 고도: ${elev}m`;
-    elevDisplay.style.display = 'block';
+    elevDisplay.textContent = `📍 고도 ${elev}m  (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
   } catch {
-    elevDisplay.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — 고도 조회 실패 (API 제한)`;
+    elevDisplay.textContent = `📍 고도 조회 실패 — 다시 클릭해보세요`;
   }
 });
 
-// Fit to Gangnam area
-map.fitBounds(gangnamBounds, { padding: [20, 20] });
+// --- My Location ---
+let locMarker = null;
+let locCircle = null;
+
+document.getElementById('locateBtn').addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert('이 브라우저에서 위치 서비스를 지원하지 않습니다.');
+    return;
+  }
+  const btn = document.getElementById('locateBtn');
+  btn.textContent = '⏳';
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+
+    if (locMarker) { map.removeLayer(locMarker); map.removeLayer(locCircle); }
+
+    const locIcon = L.divIcon({
+      html: '<div class="loc-pulse"></div>',
+      className: '',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+
+    locMarker = L.marker([lat, lng], { icon: locIcon, zIndexOffset: 9999 })
+      .bindPopup(`📍 내 위치<br>${lat.toFixed(5)}, ${lng.toFixed(5)}`)
+      .addTo(map)
+      .openPopup();
+
+    locCircle = L.circle([lat, lng], {
+      radius: accuracy,
+      color: '#4285F4',
+      fillColor: '#4285F4',
+      fillOpacity: 0.1,
+      weight: 1
+    }).addTo(map);
+
+    map.setView([lat, lng], 15);
+    btn.textContent = '📍';
+
+    // Also fetch elevation
+    fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`)
+      .then(r => r.json())
+      .then(d => {
+        const elev = d.results[0].elevation;
+        elevDisplay.style.display = 'block';
+        elevDisplay.textContent = `📍 내 위치 고도: ${elev}m`;
+        locMarker.setPopupContent(`📍 내 위치 — 고도 ${elev}m<br>${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      })
+      .catch(() => {});
+  }, err => {
+    btn.textContent = '📍';
+    alert('위치를 가져올 수 없습니다: ' + err.message);
+  }, { enableHighAccuracy: true, timeout: 10000 });
+});
 </script>
 </body>
 </html>

@@ -751,14 +751,15 @@ async function enterMc() {
 
   mcScene = new THREE.Scene();
   mcScene.background = new THREE.Color(0x87CEEB);
-  mcScene.fog = new THREE.Fog(0x87CEEB, 80, 220);
+  mcScene.fog = new THREE.Fog(0x87CEEB, 60, 160);
 
   mcCamera = new THREE.PerspectiveCamera(70, W / H, 0.1, 300);
   mcCamera.position.set(64, 30, 64);
 
-  mcRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  mcRenderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobileDevice, powerPreference: 'high-performance' });
   mcRenderer.setSize(W, H);
-  mcRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  mcRenderer.setPixelRatio(isMobileDevice ? 1 : Math.min(window.devicePixelRatio, 2));
 
   mcScene.add(new THREE.AmbientLight(0xffffff, 0.55));
   const sun = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -789,9 +790,8 @@ async function enterMc() {
 
   // === Jump / Down buttons ===
   let mcJumping = false, mcDescending = false;
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  if (isMobile) {
+  if (isMobileDevice) {
     document.getElementById('mcJoystickArea').style.display = 'block';
     document.getElementById('mcJumpBtn').style.display = 'block';
     document.getElementById('mcDownBtn').style.display = 'block';
@@ -916,10 +916,20 @@ async function enterMc() {
     }
   });
 
-  // === Game loop ===
-  (function animate() {
+  // === Game loop (30fps cap on mobile) ===
+  let frameCount = 0;
+  let lastFrame = 0;
+  const frameCap = isMobileDevice ? 33.3 : 0; // ~30fps on mobile, uncapped PC
+  const coordsEl = document.getElementById('mcCoords');
+
+  (function animate(now) {
     if (!mcActive) return;
     mcRaf = requestAnimationFrame(animate);
+
+    // Frame rate cap for mobile
+    if (frameCap && now - lastFrame < frameCap) return;
+    lastFrame = now;
+
     const spd = mcKeys['shift'] ? 0.5 : 0.18;
     const fwd_x = Math.cos(yaw) * spd, fwd_z = Math.sin(yaw) * spd;
 
@@ -933,10 +943,8 @@ async function enterMc() {
     if (joyActive && (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1)) {
       const jSpd = spd * Math.min(1, Math.hypot(joyX, joyY));
       const jfx = Math.cos(yaw) * jSpd, jfz = Math.sin(yaw) * jSpd;
-      // Forward/back (joyY: up=-1 down=+1)
       mcCamera.position.x -= jfx * joyY;
       mcCamera.position.z -= jfz * joyY;
-      // Strafe (joyX: left=-1 right=+1)
       mcCamera.position.x -= jfz * joyX;
       mcCamera.position.z += jfx * joyX;
     }
@@ -951,9 +959,13 @@ async function enterMc() {
       mcCamera.position.y + Math.sin(ptch) * 10,
       mcCamera.position.z + Math.sin(yaw) * 10
     );
-    document.getElementById('mcCoords').textContent = `X:${Math.floor(mcCamera.position.x)} Y:${Math.floor(camY)} Z:${Math.floor(mcCamera.position.z)}`;
+
+    // DOM update every 10 frames to reduce overhead
+    if (++frameCount % 10 === 0) {
+      coordsEl.textContent = `X:${Math.floor(mcCamera.position.x)} Y:${Math.floor(camY)} Z:${Math.floor(mcCamera.position.z)}`;
+    }
     mcRenderer.render(mcScene, mcCamera);
-  })();
+  })(0);
 }
 
 async function loadDEM() {
@@ -992,100 +1004,95 @@ async function loadDEM() {
 function buildBlocks(grid) {
   const S = 128;
   const mn = Math.min(...grid), mx = Math.max(...grid), rng = mx - mn || 1;
-  const geo = new THREE.BoxGeometry(1, 1, 1);
 
-  // Minecraft-style: base color by biome zone, brightness by elevation
-  // Higher = lighter, Lower = darker (like MC map rendering)
-  function mcColor(elev, norm, layer) {
-    // Layer: 0=surface, 1+=underground
-    if (layer >= 3) return quantize(0x60, 0x60, 0x60, 0.6 + norm * 0.3); // stone
-    if (layer >= 1) return quantize(0x8B, 0x6B, 0x4A, 0.55 + norm * 0.35); // dirt
+  // Build heightmap (integer block heights)
+  const heights = new Int32Array(S * S);
+  for (let i = 0; i < S * S; i++) heights[i] = Math.max(1, Math.round(((grid[i] - mn) / rng) * 28));
 
-    // Surface: MC map style brightness by height
-    const brightness = 0.45 + norm * 0.55; // 0.45 (darkest low) → 1.0 (brightest high)
+  function getH(x, z) { return (x >= 0 && x < S && z >= 0 && z < S) ? heights[z * S + x] : 0; }
 
-    if (norm < 0.08) {
-      // Water/beach level — sand
-      return quantize(0xDB, 0xCF, 0x9C, brightness);
-    } else if (norm < 0.35) {
-      // Low grass — dark green, gets brighter with height
-      return quantize(0x5D, 0x8A, 0x3C, brightness);
-    } else if (norm < 0.55) {
-      // Mid grass — slightly olive
-      return quantize(0x6B, 0x8E, 0x23, brightness);
-    } else if (norm < 0.75) {
-      // Hill — brownish green
-      return quantize(0x7B, 0x7B, 0x3A, brightness);
-    } else if (norm < 0.9) {
-      // Mountain — stone brown
-      return quantize(0x8B, 0x73, 0x55, brightness);
-    } else {
-      // Peak — light stone
-      return quantize(0x9E, 0x9E, 0x9E, brightness);
-    }
-  }
-
-  function quantize(r, g, b, brightness) {
-    // Quantize to reduce unique colors → fewer instanced meshes
-    const br = Math.min(1.0, brightness);
+  // Surface color by elevation norm
+  function surfaceColor(norm, shadeFactor) {
+    const br = Math.min(1, (0.45 + norm * 0.55) * shadeFactor);
+    let r, g, b;
+    if (norm < 0.08) { r = 0xDB; g = 0xCF; b = 0x9C; }
+    else if (norm < 0.35) { r = 0x5D; g = 0x8A; b = 0x3C; }
+    else if (norm < 0.55) { r = 0x6B; g = 0x8E; b = 0x23; }
+    else if (norm < 0.75) { r = 0x7B; g = 0x7B; b = 0x3A; }
+    else if (norm < 0.9) { r = 0x8B; g = 0x73; b = 0x55; }
+    else { r = 0x9E; g = 0x9E; b = 0x9E; }
     const qr = (Math.round(r * br / 17) * 17) & 0xFF;
     const qg = (Math.round(g * br / 17) * 17) & 0xFF;
     const qb = (Math.round(b * br / 17) * 17) & 0xFF;
     return (qr << 16) | (qg << 8) | qb;
   }
 
+  // Dirt/stone side color
+  function sideColor(norm) {
+    const br = 0.5 + norm * 0.3;
+    const qr = (Math.round(0x8B * br / 17) * 17) & 0xFF;
+    const qg = (Math.round(0x6B * br / 17) * 17) & 0xFF;
+    const qb = (Math.round(0x4A * br / 17) * 17) & 0xFF;
+    return (qr << 16) | (qg << 8) | qb;
+  }
+
+  // Collect surface blocks only + cliff side columns
   const buckets = new Map();
+  function addBlock(c, x, y, z) {
+    if (!buckets.has(c)) buckets.set(c, []);
+    buckets.get(c).push(x, y, z);
+  }
 
   for (let z = 0; z < S; z++) {
     for (let x = 0; x < S; x++) {
-      const e = grid[z * S + x];
-      const norm = (e - mn) / rng;
-      const h = Math.max(1, Math.round(norm * 28));
+      const h = heights[z * S + x];
+      const norm = (grid[z * S + x] - mn) / rng;
 
-      // Check neighbors for "cliff" detection — darken north-facing slopes
-      let shadeFactor = 1.0;
-      if (z > 0) {
-        const nElev = grid[(z - 1) * S + x];
-        const diff = e - nElev;
-        if (diff > 3) shadeFactor = 1.08; // south-facing (lit) → brighter
-        else if (diff < -3) shadeFactor = 0.82; // north-facing (shadow) → darker
-      }
+      // Shade factor from north neighbor
+      let sf = 1.0;
+      if (z > 0) { const d = grid[z * S + x] - grid[(z - 1) * S + x]; sf = d > 3 ? 1.08 : d < -3 ? 0.82 : 1.0; }
 
-      const layers = Math.min(h, 5);
-      for (let ly = 0; ly < layers; ly++) {
-        const adjNorm = Math.max(0, Math.min(1, norm * shadeFactor));
-        const c = mcColor(e, ly === 0 ? adjNorm : norm, ly);
-        if (!buckets.has(c)) buckets.set(c, []);
-        buckets.get(c).push([x, h - ly - 0.5, z]);
+      // Top surface block (always visible)
+      addBlock(surfaceColor(norm, sf), x, h - 0.5, z);
+
+      // Side columns: only fill down to max neighbor height (exposed cliff faces)
+      const nh = Math.max(getH(x - 1, z), getH(x + 1, z), getH(x, z - 1), getH(x, z + 1));
+      if (nh < h - 1) {
+        const sc = sideColor(norm);
+        // Only add 1 dirt block below surface + fill rest as column sides
+        const fillTo = Math.max(nh, 0);
+        const maxFill = Math.min(h - 1 - fillTo, 6); // cap cliff fill at 6 blocks
+        for (let ly = 0; ly < maxFill; ly++) {
+          addBlock(sc, x, h - 1.5 - ly, z);
+        }
       }
     }
   }
 
+  // Single shared geometry
+  const geo = new THREE.BoxGeometry(1, 1, 1);
   const dummy = new THREE.Object3D();
-  buckets.forEach((positions, color) => {
+
+  buckets.forEach((arr, color) => {
+    const count = arr.length / 3;
     const mat = new THREE.MeshLambertMaterial({ color });
-    const mesh = new THREE.InstancedMesh(geo, mat, positions.length);
-    positions.forEach((p, i) => {
-      dummy.position.set(p[0], p[1], p[2]);
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    for (let i = 0; i < count; i++) {
+      dummy.position.set(arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-    });
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = true;
     mcScene.add(mesh);
   });
 
-  // Water plane
+  // Water plane (single)
   const waterGeo = new THREE.PlaneGeometry(S, S);
-  const waterMat = new THREE.MeshLambertMaterial({ color: 0x3066BE, transparent: true, opacity: 0.65 });
-  const water = new THREE.Mesh(waterGeo, waterMat);
+  const water = new THREE.Mesh(waterGeo, new THREE.MeshLambertMaterial({ color: 0x3066BE, transparent: true, opacity: 0.6 }));
   water.rotation.x = -Math.PI / 2;
   water.position.set(S / 2, 2.5, S / 2);
   mcScene.add(water);
-
-  // Second water layer for depth effect
-  const water2 = new THREE.Mesh(waterGeo, new THREE.MeshLambertMaterial({ color: 0x1a4a8a, transparent: true, opacity: 0.3 }));
-  water2.rotation.x = -Math.PI / 2;
-  water2.position.set(S / 2, 1.5, S / 2);
-  mcScene.add(water2);
 }
 
 function addSigns(grid) {

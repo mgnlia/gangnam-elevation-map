@@ -442,12 +442,16 @@ document.getElementById('btnLocate').addEventListener('click', () => {
   }, {enableHighAccuracy:true, timeout:15000, maximumAge:30000});
 });
 
-// Auto-locate on mobile on first load
-if (/Mobi|Android|iPhone/i.test(navigator.userAgent) && navigator.geolocation) {
+// Default location: 선정릉역
+const DEFAULT_LOC = { lat: 37.5104, lng: 127.0448 };
+showMyLocation(DEFAULT_LOC.lat, DEFAULT_LOC.lng, 50);
+map.setView([DEFAULT_LOC.lat, DEFAULT_LOC.lng], 15);
+
+// Auto-locate on mobile (overrides default if successful)
+if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(p => {
     const {latitude:la,longitude:lo,accuracy:ac}=p.coords;
     showMyLocation(la, lo, ac);
-    // Don't auto-pan, just show the dot
   }, ()=>{}, {enableHighAccuracy:false, timeout:8000, maximumAge:60000});
 }
 

@@ -1066,8 +1066,48 @@ async function loadDEM() {
 function buildBlocks(grid) {
   const S = 128;
   const mn = Math.min(...grid), mx = Math.max(...grid), rng = mx - mn || 1;
-  const colors = [0x3B7A2B, 0x4A8C3A, 0x6B8E23, 0x8B7355, 0x8B6914, 0x9E7B4F, 0x808080, 0xA0A0A0];
   const geo = new THREE.BoxGeometry(1, 1, 1);
+
+  // Minecraft-style: base color by biome zone, brightness by elevation
+  // Higher = lighter, Lower = darker (like MC map rendering)
+  function mcColor(elev, norm, layer) {
+    // Layer: 0=surface, 1+=underground
+    if (layer >= 3) return quantize(0x60, 0x60, 0x60, 0.6 + norm * 0.3); // stone
+    if (layer >= 1) return quantize(0x8B, 0x6B, 0x4A, 0.55 + norm * 0.35); // dirt
+
+    // Surface: MC map style brightness by height
+    const brightness = 0.45 + norm * 0.55; // 0.45 (darkest low) → 1.0 (brightest high)
+
+    if (norm < 0.08) {
+      // Water/beach level — sand
+      return quantize(0xDB, 0xCF, 0x9C, brightness);
+    } else if (norm < 0.35) {
+      // Low grass — dark green, gets brighter with height
+      return quantize(0x5D, 0x8A, 0x3C, brightness);
+    } else if (norm < 0.55) {
+      // Mid grass — slightly olive
+      return quantize(0x6B, 0x8E, 0x23, brightness);
+    } else if (norm < 0.75) {
+      // Hill — brownish green
+      return quantize(0x7B, 0x7B, 0x3A, brightness);
+    } else if (norm < 0.9) {
+      // Mountain — stone brown
+      return quantize(0x8B, 0x73, 0x55, brightness);
+    } else {
+      // Peak — light stone
+      return quantize(0x9E, 0x9E, 0x9E, brightness);
+    }
+  }
+
+  function quantize(r, g, b, brightness) {
+    // Quantize to reduce unique colors → fewer instanced meshes
+    const br = Math.min(1.0, brightness);
+    const qr = (Math.round(r * br / 17) * 17) & 0xFF;
+    const qg = (Math.round(g * br / 17) * 17) & 0xFF;
+    const qb = (Math.round(b * br / 17) * 17) & 0xFF;
+    return (qr << 16) | (qg << 8) | qb;
+  }
+
   const buckets = new Map();
 
   for (let z = 0; z < S; z++) {
@@ -1075,13 +1115,22 @@ function buildBlocks(grid) {
       const e = grid[z * S + x];
       const norm = (e - mn) / rng;
       const h = Math.max(1, Math.round(norm * 28));
-      const ci = Math.min(colors.length - 1, Math.floor(norm * colors.length));
+
+      // Check neighbors for "cliff" detection — darken north-facing slopes
+      let shadeFactor = 1.0;
+      if (z > 0) {
+        const nElev = grid[(z - 1) * S + x];
+        const diff = e - nElev;
+        if (diff > 3) shadeFactor = 1.08; // south-facing (lit) → brighter
+        else if (diff < -3) shadeFactor = 0.82; // north-facing (shadow) → darker
+      }
+
       const layers = Math.min(h, 5);
       for (let ly = 0; ly < layers; ly++) {
-        const c = ly === 0 ? colors[ci] : ly < 3 ? 0x8B6B4A : 0x606060;
-        const key = c;
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key).push([x, h - ly - 0.5, z]);
+        const adjNorm = Math.max(0, Math.min(1, norm * shadeFactor));
+        const c = mcColor(e, ly === 0 ? adjNorm : norm, ly);
+        if (!buckets.has(c)) buckets.set(c, []);
+        buckets.get(c).push([x, h - ly - 0.5, z]);
       }
     }
   }
@@ -1100,11 +1149,17 @@ function buildBlocks(grid) {
 
   // Water plane
   const waterGeo = new THREE.PlaneGeometry(S, S);
-  const waterMat = new THREE.MeshLambertMaterial({ color: 0x3B82F6, transparent: true, opacity: 0.6 });
+  const waterMat = new THREE.MeshLambertMaterial({ color: 0x3066BE, transparent: true, opacity: 0.65 });
   const water = new THREE.Mesh(waterGeo, waterMat);
   water.rotation.x = -Math.PI / 2;
-  water.position.set(S / 2, 2, S / 2);
+  water.position.set(S / 2, 2.5, S / 2);
   mcScene.add(water);
+
+  // Second water layer for depth effect
+  const water2 = new THREE.Mesh(waterGeo, new THREE.MeshLambertMaterial({ color: 0x1a4a8a, transparent: true, opacity: 0.3 }));
+  water2.rotation.x = -Math.PI / 2;
+  water2.position.set(S / 2, 1.5, S / 2);
+  mcScene.add(water2);
 }
 
 function addSigns(grid) {

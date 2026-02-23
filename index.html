@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>강남구 고도 지도 | Gangnam-gu Elevation Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+#map { width: 100%; height: 100vh; }
+
+.info-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  background: rgba(255,255,255,0.95);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  max-width: 280px;
+  font-size: 14px;
+}
+.info-panel h2 {
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: #333;
+}
+.info-panel p {
+  color: #666;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.elevation-display {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 500;
+  display: none;
+  white-space: nowrap;
+}
+
+.legend {
+  position: absolute;
+  bottom: 30px;
+  right: 10px;
+  z-index: 1000;
+  background: rgba(255,255,255,0.95);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  font-size: 12px;
+}
+.legend h4 { margin-bottom: 6px; font-size: 13px; }
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 3px;
+}
+.legend-color {
+  width: 24px;
+  height: 14px;
+  border-radius: 3px;
+  margin-right: 6px;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.layer-control {
+  position: absolute;
+  top: 10px;
+  left: 60px;
+  z-index: 1000;
+  background: rgba(255,255,255,0.95);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  font-size: 13px;
+}
+.layer-control label {
+  display: block;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+.layer-control input { margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="info-panel">
+  <h2>🏔️ 강남구 고도 지도</h2>
+  <p>등고선과 음영기복이 표시된 강남구 지형도입니다.</p>
+  <p>🖱️ 지도를 클릭하면 해당 지점의 고도를 확인할 수 있습니다.</p>
+  <p style="font-size:12px;color:#999;">데이터: OpenTopoMap, OpenStreetMap, Open-Elevation API</p>
+</div>
+
+<div class="layer-control">
+  <strong>🗺️ 레이어</strong>
+  <label><input type="radio" name="base" value="topo" checked> 등고선 지형도</label>
+  <label><input type="radio" name="base" value="osm"> 일반 지도</label>
+  <label><input type="radio" name="base" value="satellite"> 위성 지도</label>
+  <hr style="margin:6px 0">
+  <label><input type="checkbox" id="hillshade" checked> 음영기복 (Hillshade)</label>
+  <label><input type="checkbox" id="contours" checked> 등고선 강조</label>
+  <label><input type="checkbox" id="markers" checked> 주요 언덕 마커</label>
+</div>
+
+<div class="elevation-display" id="elevationDisplay"></div>
+
+<div class="legend">
+  <h4>고도 범위</h4>
+  <div class="legend-item"><div class="legend-color" style="background:#1a9850"></div> 0~20m (저지대)</div>
+  <div class="legend-item"><div class="legend-color" style="background:#91cf60"></div> 20~40m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#d9ef8b"></div> 40~60m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#fee08b"></div> 60~100m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#fc8d59"></div> 100~150m</div>
+  <div class="legend-item"><div class="legend-color" style="background:#d73027"></div> 150m+ (고지대)</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Gangnam-gu bounds
+const gangnamCenter = [37.4975, 127.0475];
+const gangnamBounds = [[37.464, 127.012], [37.532, 127.105]];
+
+// Base layers
+const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  maxZoom: 17,
+  attribution: '© OpenTopoMap (CC-BY-SA)'
+});
+
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap contributors'
+});
+
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 18,
+  attribution: '© Esri'
+});
+
+// Hillshade overlay - using Thunderforest-like or Stamen terrain
+const hillshadeLayer = L.tileLayer('https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png', {
+  maxZoom: 17,
+  opacity: 0.45,
+  attribution: '© Hillshading SRTM'
+});
+
+// Contour overlay (OpenTopoMap on top of other bases for contour lines)
+const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  maxZoom: 17,
+  opacity: 0.35,
+  attribution: ''
+});
+
+// Init map
+const map = L.map('map', {
+  center: gangnamCenter,
+  zoom: 14,
+  layers: [topoLayer, hillshadeLayer]
+});
+
+// Gangnam-gu boundary highlight
+const gangnamOutline = L.rectangle(gangnamBounds, {
+  color: '#e74c3c',
+  weight: 2,
+  fill: false,
+  dashArray: '8,4',
+  opacity: 0.6
+}).addTo(map);
+
+// Notable hills/elevated areas in Gangnam-gu
+const hills = [
+  { name: '대모산 (大母山)', lat: 37.4730, lng: 127.0830, elev: '293m', desc: '강남구 최고봉, 수서동' },
+  { name: '구룡산 (九龍山)', lat: 37.4785, lng: 127.0620, elev: '306m', desc: '개포동, 등산로 인기' },
+  { name: '우면산 (牛眠山)', lat: 37.4780, lng: 127.0080, elev: '293m', desc: '서초구 경계, 예술의전당 뒤' },
+  { name: '매봉산', lat: 37.4910, lng: 127.0450, elev: '101m', desc: '도곡동, 매봉역 인근' },
+  { name: '달터근린공원', lat: 37.5080, lng: 127.0520, elev: '60m', desc: '삼성동 언덕' },
+  { name: '언주로 일대 (역삼동 언덕)', lat: 37.5010, lng: 127.0380, elev: '45m', desc: '역삼동 내 구릉지' },
+  { name: '일원동 구릉지', lat: 37.4830, lng: 127.0900, elev: '80m', desc: '삼성서울병원 인근 고지대' },
+  { name: '세곡동 구릉', lat: 37.4680, lng: 127.0700, elev: '120m', desc: '세곡동 남부 구릉' },
+  { name: '수서동 고지대', lat: 37.4870, lng: 127.1010, elev: '90m', desc: 'SRT수서역 동쪽 언덕' },
+];
+
+const hillIcon = L.divIcon({
+  html: '⛰️',
+  className: 'hill-marker',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
+});
+
+const markerGroup = L.layerGroup();
+hills.forEach(h => {
+  const marker = L.marker([h.lat, h.lng], { icon: hillIcon })
+    .bindPopup(`<strong>${h.name}</strong><br>고도: ${h.elev}<br>${h.desc}`);
+  markerGroup.addLayer(marker);
+});
+markerGroup.addTo(map);
+
+// Layer switching
+const baseLayers = { topo: topoLayer, osm: osmLayer, satellite: satelliteLayer };
+let currentBase = 'topo';
+
+document.querySelectorAll('input[name="base"]').forEach(radio => {
+  radio.addEventListener('change', e => {
+    map.removeLayer(baseLayers[currentBase]);
+    currentBase = e.target.value;
+    map.addLayer(baseLayers[currentBase]);
+    // Show contour overlay on non-topo bases
+    const contourCheckbox = document.getElementById('contours');
+    if (currentBase !== 'topo' && contourCheckbox.checked) {
+      if (!map.hasLayer(contourOverlay)) map.addLayer(contourOverlay);
+    } else {
+      if (map.hasLayer(contourOverlay)) map.removeLayer(contourOverlay);
+    }
+  });
+});
+
+document.getElementById('hillshade').addEventListener('change', e => {
+  e.target.checked ? map.addLayer(hillshadeLayer) : map.removeLayer(hillshadeLayer);
+});
+
+document.getElementById('contours').addEventListener('change', e => {
+  if (currentBase !== 'topo') {
+    e.target.checked ? map.addLayer(contourOverlay) : map.removeLayer(contourOverlay);
+  }
+});
+
+document.getElementById('markers').addEventListener('change', e => {
+  e.target.checked ? map.addLayer(markerGroup) : map.removeLayer(markerGroup);
+});
+
+// Click to get elevation
+const elevDisplay = document.getElementById('elevationDisplay');
+let elevMarker = null;
+
+map.on('click', async (e) => {
+  const { lat, lng } = e.latlng;
+  elevDisplay.style.display = 'block';
+  elevDisplay.textContent = '⏳ 고도 조회 중...';
+
+  if (elevMarker) map.removeLayer(elevMarker);
+  elevMarker = L.circleMarker([lat, lng], {
+    radius: 6, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 0.8
+  }).addTo(map);
+
+  try {
+    const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`);
+    const data = await res.json();
+    const elev = data.results[0].elevation;
+    elevDisplay.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — 고도: ${elev}m`;
+    elevDisplay.style.display = 'block';
+  } catch {
+    elevDisplay.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — 고도 조회 실패 (API 제한)`;
+  }
+});
+
+// Fit to Gangnam area
+map.fitBounds(gangnamBounds, { padding: [20, 20] });
+</script>
+</body>
+</html>

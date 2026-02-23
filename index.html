@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>강남 자전거 고도 지도 🚴</title>
+<title>서울 자전거 고도 지도 🚴</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -106,6 +106,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
   <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
+  <label><input type="checkbox" id="chkContourFill"> 🎨 등고선 사이 색칠</label>
 </div>
 
 <div class="legend-bar" id="legendBar">
@@ -143,7 +144,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div id="mcOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:#87CEEB">
   <canvas id="mcCanvas" style="width:100%;height:100%;display:block"></canvas>
   <div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;border-radius:8px;padding:8px 16px;font-size:12px;text-align:center;pointer-events:none" id="mcHelp">
-    <b>🎮 강남구 마인크래프트</b><br>
+    <b>🎮 서울 마인크래프트</b><br>
     PC: WASD 이동 · 마우스 시점 · Space 점프 · Q/E 높이<br>
     모바일: 왼쪽 조이스틱=이동 · 오른쪽 드래그=시점
   </div>
@@ -162,8 +163,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
 <script>
-const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
-const GANGNAM_CENTER = [127.047, 37.497];
+const DEFAULT_LOC = [126.9780, 37.5665]; // 서울시청 [lng, lat]
+const SEOUL_CENTER = [126.9780, 37.5665];
 
 // ===== Map (base only — contours added after load) =====
 const map = new maplibregl.Map({
@@ -273,6 +274,26 @@ map.on('load', () => {
       },
       paint: { 'text-color': 'rgba(46,125,50,0.9)', 'text-halo-color': 'rgba(255,255,255,0.85)', 'text-halo-width': 1.5 }
     });
+
+    // Contour fill bands (between contour lines)
+    map.addLayer({
+      id: 'contour-fill-bands', type: 'fill', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 1],
+      paint: {
+        'fill-color': [
+          'interpolate', ['linear'], ['get','ele'],
+          0, 'rgba(255,255,224,0.15)',
+          50, 'rgba(255,237,160,0.18)',
+          100, 'rgba(254,217,118,0.20)',
+          150, 'rgba(254,178,76,0.22)',
+          200, 'rgba(253,141,60,0.24)',
+          250, 'rgba(252,78,42,0.26)',
+          300, 'rgba(227,26,28,0.28)'
+        ],
+        'fill-opacity': 0.25
+      },
+      layout: { 'visibility': 'none' }
+    }, 'contour-lines');
   } catch(err) {
     console.warn('Contour init failed:', err);
   }
@@ -653,7 +674,7 @@ document.getElementById('btnLayers').addEventListener('click', () => {
   document.getElementById('legendBar').classList.remove('show');
 });
 document.getElementById('btnReset').addEventListener('click', () => {
-  map.flyTo({ center: GANGNAM_CENTER, zoom: 14, pitch: 40, bearing: 0, duration: 1000 });
+  map.flyTo({ center: SEOUL_CENTER, zoom: 14, pitch: 40, bearing: 0, duration: 1000 });
 });
 
 let is3d = true;
@@ -692,6 +713,12 @@ document.getElementById('contourOpacity').addEventListener('input', e => {
     map.setPaintProperty('contour-lines-major', 'line-opacity', v);
     map.setPaintProperty('contour-labels', 'text-opacity', v);
   } catch(err) {}
+});
+
+// Contour fill bands toggle
+document.getElementById('chkContourFill')?.addEventListener('change', e => {
+  const v = e.target.checked ? 'visible' : 'none';
+  try { map.setLayoutProperty('contour-fill-bands', 'visibility', v); } catch(err) {}
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {

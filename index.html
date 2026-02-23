@@ -331,11 +331,11 @@ map.on('load', () => {
     geometry: { type: 'Point', coordinates: [s.lo, s.la] }
   }));
   map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: stnFeatures } });
-  // Station circle
+  // Station dot
   map.addLayer({ id: 'station-circle', type: 'circle', source: 'stations',
-    paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': ['get','color'], 'circle-stroke-width': 2.5 }
+    paint: { 'circle-radius': 4, 'circle-color': ['get','color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 }
   });
-  // Station label
+  // Station label - no box, transparent bg with text shadow only
   map.addLayer({ id: 'station-label', type: 'symbol', source: 'stations',
     layout: {
       'text-field': ['get','name'],
@@ -345,7 +345,7 @@ map.on('load', () => {
     },
     paint: {
       'text-color': ['get','color'],
-      'text-halo-color': '#ffffff', 'text-halo-width': 2.5
+      'text-halo-color': 'rgba(255,255,255,0.7)', 'text-halo-width': 1.5, 'text-halo-blur': 1
     }
   });
 

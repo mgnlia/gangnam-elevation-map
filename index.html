@@ -106,7 +106,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
   <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
-  <label><input type="checkbox" id="chkContourFill"> 🎨 등고선 사이 색칠</label>
+  <label><input type="checkbox" id="chkContourFill" checked> 🎨 등고선 사이 색칠</label>
 </div>
 
 <div class="legend-bar" id="legendBar">
@@ -275,7 +275,9 @@ map.on('load', () => {
       paint: { 'text-color': 'rgba(46,125,50,0.9)', 'text-halo-color': 'rgba(255,255,255,0.85)', 'text-halo-width': 1.5 }
     });
 
-    // Contour fill bands (between contour lines)
+    // Contour fill bands (between contour lines) - DISABLED (contour source is lines, not polygons)
+    // To enable hypsometric tinting, use a raster color ramp layer instead
+    /*
     map.addLayer({
       id: 'contour-fill-bands', type: 'fill', source: 'contour-source', 'source-layer': 'contours',
       filter: ['==', ['get','level'], 1],
@@ -294,6 +296,33 @@ map.on('load', () => {
       },
       layout: { 'visibility': 'none' }
     }, 'contour-lines');
+    */
+
+    // Hypsometric tint - elevation coloring using hillshade with accent colors
+    // Yellow(low) -> Red(high) elevation visualization
+    map.addLayer({
+      id: 'elevation-color-overlay',
+      type: 'hillshade',
+      source: 'terrain-dem',
+      paint: {
+        'hillshade-shadow-color': 'rgba(255,200,100,0.2)',
+        'hillshade-highlight-color': 'rgba(255,100,100,0.15)',
+        'hillshade-accent-color': 'rgba(200,50,50,0.25)',
+        'hillshade-exaggeration': 0.8
+      },
+      layout: { 'visibility': 'visible' }
+    }, 'contour-lines');
+
+    // Elevation color legend reference
+    const elevColors = [
+      { h: 0, c: '#ffffb2' },
+      { h: 50, c: '#fed976' },
+      { h: 100, c: '#feb24c' },
+      { h: 150, c: '#fd8d3c' },
+      { h: 200, c: '#fc4e2a' },
+      { h: 250, c: '#e31a1c' },
+      { h: 300, c: '#b10026' }
+    ];
   } catch(err) {
     console.warn('Contour init failed:', err);
   }
@@ -718,7 +747,7 @@ document.getElementById('contourOpacity').addEventListener('input', e => {
 // Contour fill bands toggle
 document.getElementById('chkContourFill')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
-  try { map.setLayoutProperty('contour-fill-bands', 'visibility', v); } catch(err) {}
+  try { map.setLayoutProperty('elevation-color-overlay', 'visibility', v); } catch(err) {}
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {

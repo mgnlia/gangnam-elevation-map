@@ -32,10 +32,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 .ctrl-panel hr{border:none;border-top:1px solid #eee;margin:5px 0}
 
 .legend-bar{
+  display:none;
   position:absolute;top:52px;right:10px;z-index:9;
   background:#fff;border-radius:8px;padding:6px 8px;
   box-shadow:0 1px 4px rgba(0,0,0,0.1);font-size:10px;color:#888;
 }
+.legend-bar.show{display:block}
 .legend-bar h4{font-size:11px;color:#555;margin-bottom:3px}
 .lg-row{display:flex;align-items:center;margin-bottom:1px}
 .lg-c{width:14px;height:8px;border-radius:2px;margin-right:4px}
@@ -174,7 +176,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
 </div>
 
-<div class="legend-bar">
+<div class="legend-bar" id="legendBar">
   <h4>🚴 지도 범례</h4>
   <div class="lg-row"><div class="lg-c" style="background:#4CAF50"></div>평지 자전거길</div>
   <div class="lg-row"><div class="lg-c" style="background:#FF9800"></div>오르막 주의 구간</div>
@@ -195,6 +197,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 </div>
 
 <div class="fab-col bot">
+  <button class="fab" id="btnLegend" title="범례">📋</button>
   <button class="fab" id="btnLayers" title="레이어">🗺️</button>
   <button class="fab fab-locate" id="btnLocate" title="내 위치">📍</button>
   <button class="fab" id="btnReset" title="전체보기">↺</button>
@@ -625,7 +628,14 @@ styleSheet.textContent = '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(66,133,244
 document.head.appendChild(styleSheet);
 
 // ===== Controls =====
-document.getElementById('btnLayers').addEventListener('click', () => document.getElementById('layerPanel').classList.toggle('show'));
+document.getElementById('btnLegend').addEventListener('click', () => {
+  document.getElementById('legendBar').classList.toggle('show');
+  document.getElementById('layerPanel').classList.remove('show');
+});
+document.getElementById('btnLayers').addEventListener('click', () => {
+  document.getElementById('layerPanel').classList.toggle('show');
+  document.getElementById('legendBar').classList.remove('show');
+});
 document.getElementById('btnReset').addEventListener('click', () => {
   map.flyTo({ center: GANGNAM_CENTER, zoom: 14, pitch: 40, bearing: 0, duration: 1000 });
 });

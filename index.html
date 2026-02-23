@@ -619,6 +619,93 @@ map.on('load', () => {
     }
   });
 
+  // --- Local maximums (연한 하이라이트) ---
+  const localMaxima = [
+    // Major peaks
+    { n:'대모산', e:293, lo:127.0830, la:37.4730, r:350 },
+    { n:'구룡산', e:306, lo:127.0620, la:37.4785, r:300 },
+    { n:'매봉산', e:101, lo:127.0450, la:37.4910, r:200 },
+    { n:'우면산', e:293, lo:127.0080, la:37.4780, r:300 },
+    // Minor local highs
+    { n:'', e:120, lo:127.0700, la:37.4680, r:150 }, // 세곡동 구릉
+    { n:'', e:80, lo:127.0900, la:37.4830, r:120 },  // 일원동 구릉
+    { n:'', e:65, lo:127.0560, la:37.4800, r:100 },  // 개포동 언덕
+    { n:'', e:55, lo:127.0380, la:37.4950, r:80 },   // 역삼 언덕
+    { n:'', e:90, lo:127.1010, la:37.4870, r:120 },  // 수서동 고지대
+    { n:'', e:50, lo:127.0520, la:37.5080, r:80 },   // 달터공원
+    { n:'', e:45, lo:127.0320, la:37.5140, r:70 },   // 학동 언덕
+    { n:'', e:70, lo:127.0750, la:37.4760, r:100 },  // 대모산입구 주변
+    { n:'', e:55, lo:127.0480, la:37.4880, r:80 },   // 도곡동 언덕
+    { n:'', e:100, lo:127.0650, la:37.4720, r:130 }, // 세곡동 남쪽
+    { n:'', e:40, lo:127.0250, la:37.5000, r:60 },   // 강남역 서쪽 미세 언덕
+  ];
+
+  // Circles (glow effect)
+  const maxCircles = localMaxima.map(m => ({
+    type: 'Feature',
+    properties: { name: m.n, elev: m.e, radius: m.r },
+    geometry: { type: 'Point', coordinates: [m.lo, m.la] }
+  }));
+  map.addSource('local-max', { type: 'geojson', data: { type: 'FeatureCollection', features: maxCircles } });
+
+  // Outer glow
+  map.addLayer({
+    id: 'local-max-glow', type: 'circle', source: 'local-max',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, ['/', ['get','radius'], 40], 15, ['/', ['get','radius'], 8]],
+      'circle-color': [
+        'interpolate', ['linear'], ['get','elev'],
+        40, 'rgba(255, 236, 179, 0.2)',   // 낮은 언덕: 연한 노랑
+        100, 'rgba(255, 204, 128, 0.25)',  // 중간: 연한 주황
+        200, 'rgba(255, 171, 145, 0.3)'    // 높은 산: 연한 빨강
+      ],
+      'circle-blur': 0.8
+    }
+  }, 'flat-routes-line');
+
+  // Inner highlight
+  map.addLayer({
+    id: 'local-max-core', type: 'circle', source: 'local-max',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 10],
+      'circle-color': [
+        'interpolate', ['linear'], ['get','elev'],
+        40, 'rgba(255, 224, 130, 0.5)',
+        100, 'rgba(255, 183, 77, 0.55)',
+        200, 'rgba(255, 138, 101, 0.6)'
+      ],
+      'circle-stroke-color': [
+        'interpolate', ['linear'], ['get','elev'],
+        40, 'rgba(255, 193, 7, 0.4)',
+        100, 'rgba(255, 152, 0, 0.45)',
+        200, 'rgba(244, 67, 54, 0.5)'
+      ],
+      'circle-stroke-width': 1.5
+    }
+  }, 'flat-routes-line');
+
+  // Elevation label on each local max
+  map.addLayer({
+    id: 'local-max-label', type: 'symbol', source: 'local-max',
+    layout: {
+      'text-field': ['concat', ['get','elev'], 'm'],
+      'text-size': 10,
+      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-allow-overlap': false,
+      'text-offset': [0, -0.8]
+    },
+    paint: {
+      'text-color': [
+        'interpolate', ['linear'], ['get','elev'],
+        40, 'rgba(230, 170, 0, 0.7)',
+        100, 'rgba(230, 120, 0, 0.8)',
+        200, 'rgba(200, 60, 40, 0.85)'
+      ],
+      'text-halo-color': 'rgba(255,255,255,0.8)',
+      'text-halo-width': 1.2
+    }
+  });
+
   // --- Peaks ---
   const peaks = [
     {n:'⛰️ 대모산 293m',la:37.4730,lo:127.0830},

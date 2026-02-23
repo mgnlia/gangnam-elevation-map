@@ -113,7 +113,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <strong style="color:#333">레이어</strong>
   <hr>
   <label>등고선 진하기</label>
-  <input type="range" id="contourOpacity" min="0" max="100" value="55">
+  <input type="range" id="contourOpacity" min="0" max="100" value="75">
   <hr>
   <label><input type="checkbox" id="chk3d" checked> 🏔️ 3D 지형</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
@@ -205,8 +205,8 @@ const map = new maplibregl.Map({
     },
     layers: [
       { id: 'base', type: 'raster', source: 'carto' },
-      { id: 'contour-overlay', type: 'raster', source: 'contour', paint: { 'raster-opacity': 0.55 } },
-      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.4 } }
+      { id: 'contour-overlay', type: 'raster', source: 'contour', paint: { 'raster-opacity': 0.75, 'raster-contrast': 0.15 } },
+      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.55 } }
     ],
     terrain: { source: 'terrain-dem', exaggeration: 2.0 }
   },

@@ -110,6 +110,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <input type="range" id="contourOpacity" min="0" max="100" value="75">
   <hr>
   <label><input type="checkbox" id="chk3d" checked> 🏔️ 3D 지형</label>
+  <label><input type="checkbox" id="chkElevColor" checked> 🎨 고도 색칠</label>
   <label><input type="checkbox" id="chkContour" checked> 〰️ 등고선</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
@@ -132,6 +133,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
     <span style="margin-right:4px;color:#C62828">›››</span> 급경사 오르막
   </div>
   <div class="lg-row"><span style="font-size:9px;margin-right:4px">〰️</span> 등고선</div>
+  <div class="lg-row"><div class="lg-c" style="background:linear-gradient(to right,#c8e6b4,#edd78c,#f0aa82)"></div>고도 색칠</div>
   <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px;color:#666">
     🤏 두 손가락 회전/기울이기
   </div>
@@ -236,6 +238,49 @@ setTimeout(() => {
 
 // ===== GeoJSON sources for overlays =====
 map.on('load', () => {
+  // --- Elevation color tint (DEM → colored raster overlay) ---
+  maplibregl.addProtocol('elevcolor', (params, cb) => {
+    const url = params.url.replace('elevcolor://', '');
+    fetch(url).then(r => r.arrayBuffer()).then(buf => {
+      const img = new Image();
+      img.onload = () => {
+        const cv = document.createElement('canvas');
+        cv.width = img.width; cv.height = img.height;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const px = ctx.getImageData(0, 0, cv.width, cv.height);
+        const d = px.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const elev = (d[i] * 256 + d[i+1] + d[i+2] / 256) - 32768;
+          // Color ramp: 0-20m green, 20-60m yellow-green, 60-120m orange, 120+ red
+          let r, g, b;
+          if (elev < 20) { r=200; g=230; b=180; }       // 연한 연두
+          else if (elev < 40) { r=210; g=225; b=155; }   // 연두-노랑
+          else if (elev < 70) { r=230; g=215; b=140; }   // 연한 노랑
+          else if (elev < 120) { r=240; g=195; b=130; }  // 연한 주황
+          else if (elev < 200) { r=240; g=170; b=130; }  // 주황
+          else { r=235; g=150; b=130; }                   // 연한 빨강
+          d[i] = r; d[i+1] = g; d[i+2] = b; d[i+3] = 55; // 낮은 투명도
+        }
+        ctx.putImageData(px, 0, 0);
+        cv.toBlob(blob => cb(null, { data: blob }, null, null), 'image/png');
+      };
+      img.src = URL.createObjectURL(new Blob([buf]));
+    }).catch(e => cb(e));
+    return { cancel: () => {} };
+  });
+
+  map.addSource('elev-color', {
+    type: 'raster',
+    tiles: ['elevcolor://https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+    tileSize: 256,
+    maxzoom: 13
+  });
+  map.addLayer({
+    id: 'elev-color-layer', type: 'raster', source: 'elev-color',
+    paint: { 'raster-opacity': 0.4 }
+  });
+
   // --- Contour lines from DEM ---
   try {
     const demSource = new mlcontour.DemSource({
@@ -735,6 +780,11 @@ document.getElementById('chk3d').addEventListener('change', e => {
     map.setTerrain(null);
     map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
   }
+});
+
+// Elevation color toggle
+document.getElementById('chkElevColor')?.addEventListener('change', e => {
+  try { map.setLayoutProperty('elev-color-layer', 'visibility', e.target.checked ? 'visible' : 'none'); } catch(err) {}
 });
 
 // Contour line visibility toggle

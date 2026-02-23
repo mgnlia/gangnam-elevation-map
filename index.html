@@ -144,12 +144,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <canvas id="mcCanvas" style="width:100%;height:100%;display:block"></canvas>
   <div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;border-radius:8px;padding:8px 16px;font-size:12px;text-align:center;pointer-events:none" id="mcHelp">
     <b>🎮 강남구 마인크래프트</b><br>
-    PC: WASD 이동 · 마우스 시점 · Space/Q 위 · E 아래<br>
-    모바일: 한 손가락=시점 · 두 손가락=이동 · 핀치=높이
+    PC: WASD 이동 · 마우스 시점 · Space 점프 · Q/E 높이<br>
+    모바일: 왼쪽 조이스틱=이동 · 오른쪽 드래그=시점
   </div>
   <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#4CAF50;font-family:monospace;font-size:11px;border-radius:4px;padding:3px 10px;pointer-events:none" id="mcCoords"></div>
   <button onclick="exitMc()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer">✕ 나가기</button>
-  <!-- Multi-touch: 1 finger=look, 2 fingers=move, pinch=height -->
+  <!-- Mobile game controls: left joystick + right look + jump button -->
+  <div id="mcJoystickArea" style="display:none;position:absolute;bottom:20px;left:20px;width:140px;height:140px;pointer-events:auto">
+    <canvas id="mcJoystickCanvas" width="140" height="140" style="width:140px;height:140px"></canvas>
+  </div>
+  <button id="mcJumpBtn" style="display:none;position:absolute;bottom:30px;right:24px;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.3);color:#fff;font-size:11px;font-weight:700;pointer-events:auto;-webkit-tap-highlight-color:transparent">JUMP</button>
+  <button id="mcDownBtn" style="display:none;position:absolute;bottom:100px;right:24px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.7);font-size:10px;font-weight:700;pointer-events:auto;-webkit-tap-highlight-color:transparent">▼</button>
 </div>
 <!-- mc-pad removed: multi-touch only -->
 
@@ -771,76 +776,181 @@ async function enterMc() {
   let yaw = -Math.PI / 2, ptch = -0.3, camY = 30;
   let dragging = false, lx = 0, ly = 0;
 
-  // Mouse: drag = look
+  // === Joystick state ===
+  let joyX = 0, joyY = 0; // -1 to 1
+  let joyActive = false, joyTouchId = null;
+  const joyCanvas = document.getElementById('mcJoystickCanvas');
+  const joyCtx = joyCanvas ? joyCanvas.getContext('2d') : null;
+  const JR = 70, JKR = 28; // joystick radius, knob radius
+  let joyKnobX = JR, joyKnobY = JR;
+
+  // === Right-side look touch tracking ===
+  let lookTouchId = null, lookLX = 0, lookLY = 0;
+
+  // === Jump / Down buttons ===
+  let mcJumping = false, mcDescending = false;
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    document.getElementById('mcJoystickArea').style.display = 'block';
+    document.getElementById('mcJumpBtn').style.display = 'block';
+    document.getElementById('mcDownBtn').style.display = 'block';
+    drawJoystick(JR, JR);
+  }
+
+  function drawJoystick(kx, ky) {
+    if (!joyCtx) return;
+    joyCtx.clearRect(0, 0, 140, 140);
+    // Outer ring
+    joyCtx.beginPath();
+    joyCtx.arc(JR, JR, JR - 4, 0, Math.PI * 2);
+    joyCtx.strokeStyle = 'rgba(255,255,255,0.25)';
+    joyCtx.lineWidth = 3;
+    joyCtx.stroke();
+    joyCtx.fillStyle = 'rgba(255,255,255,0.06)';
+    joyCtx.fill();
+    // Knob
+    joyCtx.beginPath();
+    joyCtx.arc(kx, ky, JKR, 0, Math.PI * 2);
+    joyCtx.fillStyle = 'rgba(255,255,255,0.35)';
+    joyCtx.fill();
+    joyCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+    joyCtx.lineWidth = 2;
+    joyCtx.stroke();
+  }
+
+  // Joystick touch
+  const joyArea = document.getElementById('mcJoystickArea');
+  if (joyArea) {
+    joyArea.addEventListener('touchstart', e => {
+      e.preventDefault(); e.stopPropagation();
+      const t = e.changedTouches[0];
+      joyTouchId = t.identifier;
+      joyActive = true;
+      updateJoy(t);
+    }, { passive: false });
+    joyArea.addEventListener('touchmove', e => {
+      e.preventDefault(); e.stopPropagation();
+      for (const t of e.changedTouches) {
+        if (t.identifier === joyTouchId) updateJoy(t);
+      }
+    }, { passive: false });
+    const endJoy = e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joyTouchId) {
+          joyActive = false; joyTouchId = null;
+          joyX = 0; joyY = 0;
+          joyKnobX = JR; joyKnobY = JR;
+          drawJoystick(JR, JR);
+        }
+      }
+    };
+    joyArea.addEventListener('touchend', endJoy);
+    joyArea.addEventListener('touchcancel', endJoy);
+  }
+
+  function updateJoy(t) {
+    const rect = joyCanvas.getBoundingClientRect();
+    let dx = t.clientX - rect.left - JR;
+    let dy = t.clientY - rect.top - JR;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = JR - JKR;
+    if (dist > maxDist) { dx = dx / dist * maxDist; dy = dy / dist * maxDist; }
+    joyX = dx / maxDist; // -1 to 1
+    joyY = dy / maxDist;
+    joyKnobX = JR + dx;
+    joyKnobY = JR + dy;
+    drawJoystick(joyKnobX, joyKnobY);
+  }
+
+  // Jump button
+  const jumpBtn = document.getElementById('mcJumpBtn');
+  if (jumpBtn) {
+    jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); mcJumping = true; });
+    jumpBtn.addEventListener('touchend', e => { e.preventDefault(); mcJumping = false; });
+  }
+  const downBtn = document.getElementById('mcDownBtn');
+  if (downBtn) {
+    downBtn.addEventListener('touchstart', e => { e.preventDefault(); mcDescending = true; });
+    downBtn.addEventListener('touchend', e => { e.preventDefault(); mcDescending = false; });
+  }
+
+  // === Mouse: drag = look (PC) ===
   canvas.addEventListener('mousedown', e => { dragging = true; lx = e.clientX; ly = e.clientY; });
-  canvas.addEventListener('mousemove', e => { if (!dragging) return; yaw += (e.clientX - lx) * 0.003; ptch -= (e.clientY - ly) * 0.003; ptch = Math.max(-1.2, Math.min(1.2, ptch)); lx = e.clientX; ly = e.clientY; });
+  canvas.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    yaw += (e.clientX - lx) * 0.003;
+    ptch -= (e.clientY - ly) * 0.003;
+    ptch = Math.max(-1.2, Math.min(1.2, ptch));
+    lx = e.clientX; ly = e.clientY;
+  });
   canvas.addEventListener('mouseup', () => dragging = false);
 
-  // Multi-touch: 1 finger = look, 2 fingers = move + pinch = height
-  let lastPinchDist = 0, touchCount = 0;
-  let touch1Start = null;
-
+  // === Mobile: right half of screen = look ===
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
-    touchCount = e.touches.length;
-    if (touchCount === 1) {
-      lx = e.touches[0].clientX; ly = e.touches[0].clientY;
-    } else if (touchCount >= 2) {
-      touch1Start = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
-      lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    for (const t of e.changedTouches) {
+      // Only track touches on right half (not joystick area)
+      if (t.clientX > window.innerWidth * 0.35 && lookTouchId === null) {
+        lookTouchId = t.identifier;
+        lookLX = t.clientX; lookLY = t.clientY;
+      }
     }
   }, { passive: false });
 
   canvas.addEventListener('touchmove', e => {
     e.preventDefault();
-    if (e.touches.length === 1 && touchCount === 1) {
-      // Single finger: rotate view
-      const t = e.touches[0];
-      yaw += (t.clientX - lx) * 0.004;
-      ptch -= (t.clientY - ly) * 0.004;
-      ptch = Math.max(-1.2, Math.min(1.2, ptch));
-      lx = t.clientX; ly = t.clientY;
-    } else if (e.touches.length >= 2) {
-      // Two fingers: pan (move) + pinch (height)
-      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      if (touch1Start) {
-        const dx = (cx - touch1Start.x) * 0.06;
-        const dy = (cy - touch1Start.y) * 0.06;
-        // Move relative to yaw direction
-        mcCamera.position.x -= Math.cos(yaw) * dy + Math.sin(yaw) * dx;
-        mcCamera.position.z -= Math.sin(yaw) * dy - Math.cos(yaw) * dx;
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouchId) {
+        yaw += (t.clientX - lookLX) * 0.004;
+        ptch -= (t.clientY - lookLY) * 0.004;
+        ptch = Math.max(-1.2, Math.min(1.2, ptch));
+        lookLX = t.clientX; lookLY = t.clientY;
       }
-      touch1Start = { x: cx, y: cy };
-
-      // Pinch = height
-      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-      if (lastPinchDist > 0) {
-        camY += (dist - lastPinchDist) * 0.08;
-        camY = Math.max(3, camY);
-      }
-      lastPinchDist = dist;
     }
   }, { passive: false });
 
   canvas.addEventListener('touchend', e => {
-    touchCount = e.touches.length;
-    if (touchCount < 2) { lastPinchDist = 0; touch1Start = null; }
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouchId) lookTouchId = null;
+    }
   });
 
+  // === Game loop ===
   (function animate() {
     if (!mcActive) return;
     mcRaf = requestAnimationFrame(animate);
     const spd = mcKeys['shift'] ? 0.5 : 0.18;
-    const dx = Math.cos(yaw) * spd, dz = Math.sin(yaw) * spd;
-    if (mcKeys['w'] || mcKeys['arrowup']) { mcCamera.position.x += dx; mcCamera.position.z += dz; }
-    if (mcKeys['s'] || mcKeys['arrowdown']) { mcCamera.position.x -= dx; mcCamera.position.z -= dz; }
-    if (mcKeys['a'] || mcKeys['arrowleft']) { mcCamera.position.x += dz; mcCamera.position.z -= dx; }
-    if (mcKeys['d'] || mcKeys['arrowright']) { mcCamera.position.x -= dz; mcCamera.position.z += dx; }
-    if (mcKeys[' '] || mcKeys['q']) camY += 0.15;
-    if (mcKeys['e']) camY = Math.max(3, camY - 0.15);
+    const fwd_x = Math.cos(yaw) * spd, fwd_z = Math.sin(yaw) * spd;
+
+    // Keyboard movement (PC)
+    if (mcKeys['w'] || mcKeys['arrowup']) { mcCamera.position.x += fwd_x; mcCamera.position.z += fwd_z; }
+    if (mcKeys['s'] || mcKeys['arrowdown']) { mcCamera.position.x -= fwd_x; mcCamera.position.z -= fwd_z; }
+    if (mcKeys['a'] || mcKeys['arrowleft']) { mcCamera.position.x += fwd_z; mcCamera.position.z -= fwd_x; }
+    if (mcKeys['d'] || mcKeys['arrowright']) { mcCamera.position.x -= fwd_z; mcCamera.position.z += fwd_x; }
+
+    // Joystick movement (mobile)
+    if (joyActive && (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1)) {
+      const jSpd = spd * Math.min(1, Math.hypot(joyX, joyY));
+      const jfx = Math.cos(yaw) * jSpd, jfz = Math.sin(yaw) * jSpd;
+      // Forward/back (joyY: up=-1 down=+1)
+      mcCamera.position.x -= jfx * joyY;
+      mcCamera.position.z -= jfz * joyY;
+      // Strafe (joyX: left=-1 right=+1)
+      mcCamera.position.x -= jfz * joyX;
+      mcCamera.position.z += jfx * joyX;
+    }
+
+    // Height
+    if (mcKeys[' '] || mcKeys['q'] || mcJumping) camY += 0.18;
+    if (mcKeys['e'] || mcDescending) camY = Math.max(3, camY - 0.18);
+
     mcCamera.position.y = camY;
-    mcCamera.lookAt(mcCamera.position.x + Math.cos(yaw) * 10, mcCamera.position.y + Math.sin(ptch) * 10, mcCamera.position.z + Math.sin(yaw) * 10);
+    mcCamera.lookAt(
+      mcCamera.position.x + Math.cos(yaw) * 10,
+      mcCamera.position.y + Math.sin(ptch) * 10,
+      mcCamera.position.z + Math.sin(yaw) * 10
+    );
     document.getElementById('mcCoords').textContent = `X:${Math.floor(mcCamera.position.x)} Y:${Math.floor(camY)} Z:${Math.floor(mcCamera.position.z)}`;
     mcRenderer.render(mcScene, mcCamera);
   })();

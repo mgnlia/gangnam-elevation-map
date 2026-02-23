@@ -333,15 +333,18 @@ map.on('load', () => {
   map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: stnFeatures } });
   // Station dot
   map.addLayer({ id: 'station-circle', type: 'circle', source: 'stations',
-    paint: { 'circle-radius': 4, 'circle-color': ['get','color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 }
+    paint: { 'circle-radius': 4, 'circle-color': ['get','color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5, 'circle-pitch-alignment': 'map' }
   });
-  // Station label - no box, transparent bg with text shadow only
+  // Station label - 3D: pitched with map, rotates with bearing
   map.addLayer({ id: 'station-label', type: 'symbol', source: 'stations',
     layout: {
       'text-field': ['get','name'],
       'text-size': 13, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
       'text-offset': [0, 1.2], 'text-anchor': 'top',
-      'text-allow-overlap': false, 'text-optional': true
+      'text-allow-overlap': false, 'text-optional': true,
+      'text-pitch-alignment': 'map',
+      'text-rotation-alignment': 'map',
+      'symbol-placement': 'point'
     },
     paint: {
       'text-color': ['get','color'],

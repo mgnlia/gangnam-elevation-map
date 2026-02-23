@@ -116,6 +116,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <input type="range" id="contourOpacity" min="0" max="100" value="75">
   <hr>
   <label><input type="checkbox" id="chk3d" checked> 🏔️ 3D 지형</label>
+  <label><input type="checkbox" id="chkContour" checked> 〰️ 등고선</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
   <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
@@ -170,9 +171,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
 <script>
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const GANGNAM_CENTER = [127.047, 37.497];
+
+// ===== Contour generator from DEM =====
+const demSource = new mlcontour.DemSource({
+  url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  encoding: 'terrarium',
+  maxzoom: 13,
+  worker: true
+});
+demSource.setupMaplibre(maplibregl);
 
 // ===== Map =====
 const map = new maplibregl.Map({
@@ -186,11 +197,6 @@ const map = new maplibregl.Map({
         tileSize: 256,
         attribution: '© CARTO · © OSM'
       },
-      'contour': {
-        type: 'raster',
-        tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png','https://b.tile.opentopomap.org/{z}/{x}/{y}.png'],
-        tileSize: 256
-      },
       'hillshade-tiles': {
         type: 'raster',
         tiles: ['https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png'],
@@ -201,12 +207,74 @@ const map = new maplibregl.Map({
         tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
         tileSize: 256,
         encoding: 'terrarium'
+      },
+      'contour-source': {
+        type: 'vector',
+        tiles: [demSource.contourProtocolUrl({
+          multiplier: 1,
+          overzoom: 1,
+          thresholds: {
+            11: [50],
+            12: [20, 100],
+            13: [10, 50],
+            14: [10, 50],
+            15: [5, 20]
+          },
+          elevationKey: 'ele',
+          levelKey: 'level',
+          contourLayer: 'contours'
+        })],
+        maxzoom: 15
       }
     },
     layers: [
       { id: 'base', type: 'raster', source: 'carto' },
-      { id: 'contour-overlay', type: 'raster', source: 'contour', paint: { 'raster-opacity': 0.75, 'raster-contrast': 0.15 } },
-      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.55 } }
+      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } },
+      // Minor contour lines (thin green)
+      {
+        id: 'contour-lines',
+        type: 'line',
+        source: 'contour-source',
+        'source-layer': 'contours',
+        filter: ['==', ['get', 'level'], 0],
+        paint: {
+          'line-color': 'rgba(56, 142, 60, 0.5)',
+          'line-width': 1
+        }
+      },
+      // Major contour lines (thicker green)
+      {
+        id: 'contour-lines-major',
+        type: 'line',
+        source: 'contour-source',
+        'source-layer': 'contours',
+        filter: ['==', ['get', 'level'], 1],
+        paint: {
+          'line-color': 'rgba(46, 125, 50, 0.75)',
+          'line-width': 2
+        }
+      },
+      // Contour elevation labels on major lines
+      {
+        id: 'contour-labels',
+        type: 'symbol',
+        source: 'contour-source',
+        'source-layer': 'contours',
+        filter: ['==', ['get', 'level'], 1],
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['concat', ['get', 'ele'], 'm'],
+          'text-size': 10,
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-max-angle': 25,
+          'text-padding': 50
+        },
+        paint: {
+          'text-color': 'rgba(46, 125, 50, 0.85)',
+          'text-halo-color': 'rgba(255,255,255,0.8)',
+          'text-halo-width': 1.5
+        }
+      }
     ],
     terrain: { source: 'terrain-dem', exaggeration: 2.0 }
   },
@@ -452,8 +520,17 @@ document.getElementById('chk3d').addEventListener('change', e => {
   }
 });
 
+// Contour line visibility toggle
+document.getElementById('chkContour')?.addEventListener('change', e => {
+  const v = e.target.checked ? 'visible' : 'none';
+  ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v));
+});
+
 document.getElementById('contourOpacity').addEventListener('input', e => {
-  map.setPaintProperty('contour-overlay', 'raster-opacity', e.target.value / 100);
+  const v = e.target.value / 100;
+  map.setPaintProperty('contour-lines', 'line-opacity', v);
+  map.setPaintProperty('contour-lines-major', 'line-opacity', v);
+  map.setPaintProperty('contour-labels', 'text-opacity', v);
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {

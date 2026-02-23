@@ -41,7 +41,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 .badge-danger{background:#FFEBEE;color:#C62828}
 .elev-coord{font-size:11px;color:#bbb}
 
-.compare-info{display:none}
 .compare-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
 .compare-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .compare-label{font-size:11px;color:#999}
@@ -122,8 +121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div class="top-bar">
   <h1>🚴 강남 오르막 지도 <span>언덕 피해서 타자</span></h1>
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="explore">탐색</button>
-    <button class="mode-tab" data-mode="compare">A→B 비교</button>
+    <button class="mode-tab active" data-mode="compare">A→B 고도 비교</button>
   </div>
 </div>
 
@@ -165,8 +163,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 
 <div class="bottom-sheet">
   <div class="sheet-handle"></div>
-  <div id="exploreInfo"><div class="hint-text">지도를 탭하면 고도와 경사 판정을 볼 수 있어요</div></div>
-  <div class="compare-info" id="compareInfo">
+  <div id="compareInfo">
     <div class="hint-text" id="compareHint">🅰️ 출발 지점을 탭하세요</div>
     <div id="compareResult" style="display:none">
       <div class="compare-row">
@@ -574,19 +571,8 @@ async function fetchE(la, lo) {
 }
 
 // ===== Click & Mode =====
-let mode = 'explore', cmpState = 0, ptA = null, ptB = null;
+let cmpState = 0, ptA = null, ptB = null;
 let cmpMarkers = [];
-
-document.querySelectorAll('.mode-tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.mode-tab').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    mode = t.dataset.mode;
-    resetCmp();
-    document.getElementById('exploreInfo').style.display = mode === 'explore' ? 'block' : 'none';
-    document.getElementById('compareInfo').style.display = mode === 'compare' ? 'block' : 'none';
-  });
-});
 
 function resetCmp() {
   cmpState = 0; ptA = ptB = null;
@@ -595,7 +581,6 @@ function resetCmp() {
   document.getElementById('compareHint').style.display = 'block';
   document.getElementById('compareHint').textContent = '🅰️ 출발 지점을 탭하세요';
   document.getElementById('compareResult').style.display = 'none';
-  document.getElementById('exploreInfo').innerHTML = '<div class="hint-text">지도를 탭하면 고도와 경사 판정을 볼 수 있어요</div>';
 }
 
 function gradeInfo(elev) {
@@ -615,27 +600,7 @@ function makeDotMarker(lnglat, color) {
 map.on('click', async (e) => {
   const { lng, lat } = e.lngLat;
 
-  if (mode === 'explore') {
-    cmpMarkers.forEach(m => m.remove()); cmpMarkers = [];
-    makeDotMarker([lng, lat], '#333');
-    document.getElementById('exploreInfo').innerHTML = '<div class="hint-text">⏳ 고도 조회 중...</div>';
-    const el = await fetchE(lat, lng);
-    if (el !== null) {
-      const g = gradeInfo(el);
-      document.getElementById('exploreInfo').innerHTML = `
-        <div class="elev-info">
-          <div class="elev-big" style="color:${g.color}">${el}<small>m</small></div>
-          <div>
-            <div class="elev-badge ${g.cls}">${g.text}</div>
-            <div class="elev-coord">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
-          </div>
-        </div>`;
-    } else {
-      document.getElementById('exploreInfo').innerHTML = '<div class="hint-text">⚠️ 조회 실패 — 다시 탭해보세요</div>';
-    }
-  }
-
-  else if (mode === 'compare') {
+  {
     if (cmpState === 0) {
       makeDotMarker([lng, lat], '#4CAF50');
       ptA = { lat, lng, e: null };

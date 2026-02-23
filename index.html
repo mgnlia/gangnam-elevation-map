@@ -176,16 +176,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const GANGNAM_CENTER = [127.047, 37.497];
 
-// ===== Contour generator from DEM =====
-const demSource = new mlcontour.DemSource({
-  url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-  encoding: 'terrarium',
-  maxzoom: 13,
-  worker: true
-});
-demSource.setupMaplibre(maplibregl);
-
-// ===== Map =====
+// ===== Map (base only — contours added after load) =====
 const map = new maplibregl.Map({
   container: 'map',
   style: {
@@ -207,74 +198,11 @@ const map = new maplibregl.Map({
         tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
         tileSize: 256,
         encoding: 'terrarium'
-      },
-      'contour-source': {
-        type: 'vector',
-        tiles: [demSource.contourProtocolUrl({
-          multiplier: 1,
-          overzoom: 1,
-          thresholds: {
-            11: [50],
-            12: [20, 100],
-            13: [10, 50],
-            14: [10, 50],
-            15: [5, 20]
-          },
-          elevationKey: 'ele',
-          levelKey: 'level',
-          contourLayer: 'contours'
-        })],
-        maxzoom: 15
       }
     },
     layers: [
       { id: 'base', type: 'raster', source: 'carto' },
-      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } },
-      // Minor contour lines (thin green)
-      {
-        id: 'contour-lines',
-        type: 'line',
-        source: 'contour-source',
-        'source-layer': 'contours',
-        filter: ['==', ['get', 'level'], 0],
-        paint: {
-          'line-color': 'rgba(56, 142, 60, 0.5)',
-          'line-width': 1
-        }
-      },
-      // Major contour lines (thicker green)
-      {
-        id: 'contour-lines-major',
-        type: 'line',
-        source: 'contour-source',
-        'source-layer': 'contours',
-        filter: ['==', ['get', 'level'], 1],
-        paint: {
-          'line-color': 'rgba(46, 125, 50, 0.75)',
-          'line-width': 2
-        }
-      },
-      // Contour elevation labels on major lines
-      {
-        id: 'contour-labels',
-        type: 'symbol',
-        source: 'contour-source',
-        'source-layer': 'contours',
-        filter: ['==', ['get', 'level'], 1],
-        layout: {
-          'symbol-placement': 'line',
-          'text-field': ['concat', ['get', 'ele'], 'm'],
-          'text-size': 10,
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-          'text-max-angle': 25,
-          'text-padding': 50
-        },
-        paint: {
-          'text-color': 'rgba(46, 125, 50, 0.85)',
-          'text-halo-color': 'rgba(255,255,255,0.8)',
-          'text-halo-width': 1.5
-        }
-      }
+      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } }
     ],
     terrain: { source: 'terrain-dem', exaggeration: 2.0 }
   },
@@ -300,6 +228,56 @@ setTimeout(() => {
 
 // ===== GeoJSON sources for overlays =====
 map.on('load', () => {
+  // --- Contour lines from DEM ---
+  try {
+    const demSource = new mlcontour.DemSource({
+      url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+      encoding: 'terrarium',
+      maxzoom: 13,
+      worker: true
+    });
+    demSource.setupMaplibre(maplibregl);
+
+    map.addSource('contour-source', {
+      type: 'vector',
+      tiles: [demSource.contourProtocolUrl({
+        multiplier: 1,
+        overzoom: 1,
+        thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },
+        elevationKey: 'ele',
+        levelKey: 'level',
+        contourLayer: 'contours'
+      })],
+      maxzoom: 15
+    });
+
+    // Minor contour lines
+    map.addLayer({
+      id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 0],
+      paint: { 'line-color': 'rgba(56, 142, 60, 0.5)', 'line-width': 1.2 }
+    });
+    // Major contour lines
+    map.addLayer({
+      id: 'contour-lines-major', type: 'line', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 1],
+      paint: { 'line-color': 'rgba(46, 125, 50, 0.8)', 'line-width': 2.5 }
+    });
+    // Labels on major lines
+    map.addLayer({
+      id: 'contour-labels', type: 'symbol', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 1],
+      layout: {
+        'symbol-placement': 'line', 'text-field': ['concat', ['get','ele'], 'm'],
+        'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+        'text-max-angle': 25, 'text-padding': 40
+      },
+      paint: { 'text-color': 'rgba(46,125,50,0.9)', 'text-halo-color': 'rgba(255,255,255,0.85)', 'text-halo-width': 1.5 }
+    });
+  } catch(err) {
+    console.warn('Contour init failed:', err);
+  }
+
   // --- Flat routes ---
   const flatRoutes = [
     { name: '탄천 자전거길', coords: [[127.0946,37.5145],[127.0920,37.5100],[127.0870,37.5040],[127.0810,37.4970],[127.0770,37.4910],[127.0730,37.4850],[127.0680,37.4780],[127.0640,37.4720],[127.0610,37.4665]] },
@@ -523,14 +501,16 @@ document.getElementById('chk3d').addEventListener('change', e => {
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
-  ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v));
+  try { ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err) {}
 });
 
 document.getElementById('contourOpacity').addEventListener('input', e => {
   const v = e.target.value / 100;
-  map.setPaintProperty('contour-lines', 'line-opacity', v);
-  map.setPaintProperty('contour-lines-major', 'line-opacity', v);
-  map.setPaintProperty('contour-labels', 'text-opacity', v);
+  try {
+    map.setPaintProperty('contour-lines', 'line-opacity', v);
+    map.setPaintProperty('contour-lines-major', 'line-opacity', v);
+    map.setPaintProperty('contour-labels', 'text-opacity', v);
+  } catch(err) {}
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {

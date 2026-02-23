@@ -72,6 +72,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 .lg-row{display:flex;align-items:center;margin-bottom:1px}
 .lg-c{width:14px;height:8px;border-radius:2px;margin-right:4px}
 
+/* Floating station markers */
+.floating-station{
+  display:flex;flex-direction:column;align-items:center;pointer-events:none;
+}
+.stn-pole{
+  width:2px;height:35px;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.1));
+}
+.stn-tag{
+  background:rgba(255,255,255,0.88);
+  backdrop-filter:blur(4px);
+  border:2px solid;border-radius:6px;
+  padding:2px 8px;font-size:12px;font-weight:700;
+  white-space:nowrap;
+  box-shadow:0 2px 6px rgba(0,0,0,0.15);
+  pointer-events:auto;
+}
+
 .fab-col{
   position:absolute;right:10px;z-index:10;
   display:flex;flex-direction:column;gap:8px;
@@ -204,7 +222,7 @@ const map = new maplibregl.Map({
       { id: 'base', type: 'raster', source: 'carto' },
       { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } }
     ],
-    terrain: { source: 'terrain-dem', exaggeration: 2.0 }
+    terrain: { source: 'terrain-dem', exaggeration: 4.0 }
   },
   center: DEFAULT_LOC,
   zoom: 14,
@@ -377,26 +395,19 @@ map.on('load', () => {
     geometry: { type: 'Point', coordinates: [s.lo, s.la] }
   }));
   map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: stnFeatures } });
-  // Station dot
-  map.addLayer({ id: 'station-circle', type: 'circle', source: 'stations',
-    paint: { 'circle-radius': 4, 'circle-color': ['get','color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5, 'circle-pitch-alignment': 'map' }
+  // Station labels as floating HTML markers (above terrain)
+  const stnMarkers = [];
+  stations.forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'floating-station';
+    el.innerHTML = `<div class="stn-pole"></div><div class="stn-tag" style="color:${s.c};border-color:${s.c}">${s.n}</div>`;
+    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+      .setLngLat([s.lo, s.la])
+      .addTo(map);
+    stnMarkers.push(marker);
   });
-  // Station label - 3D: pitched with map, rotates with bearing
-  map.addLayer({ id: 'station-label', type: 'symbol', source: 'stations',
-    layout: {
-      'text-field': ['get','name'],
-      'text-size': 13, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
-      'text-offset': [0, 1.2], 'text-anchor': 'top',
-      'text-allow-overlap': false, 'text-optional': true,
-      'text-pitch-alignment': 'map',
-      'text-rotation-alignment': 'map',
-      'symbol-placement': 'point'
-    },
-    paint: {
-      'text-color': ['get','color'],
-      'text-halo-color': 'rgba(255,255,255,0.7)', 'text-halo-width': 1.5, 'text-halo-blur': 1
-    }
-  });
+  // Save for toggle
+  window._stnMarkers = stnMarkers;
 
   // --- Slope arrows ---
   const slopes = [
@@ -479,7 +490,7 @@ let is3d = true;
 document.getElementById('btn3dToggle').addEventListener('click', () => {
   is3d = !is3d;
   if (is3d) {
-    map.setTerrain({ source: 'terrain-dem', exaggeration: 2.0 });
+    map.setTerrain({ source: 'terrain-dem', exaggeration: 4.0 });
     map.easeTo({ pitch: 40, duration: 500 });
     document.getElementById('btn3dToggle').textContent = '🏔️';
   } else {
@@ -491,7 +502,7 @@ document.getElementById('btn3dToggle').addEventListener('click', () => {
 
 document.getElementById('chk3d').addEventListener('change', e => {
   if (e.target.checked) {
-    map.setTerrain({ source: 'terrain-dem', exaggeration: 2.0 });
+    map.setTerrain({ source: 'terrain-dem', exaggeration: 4.0 });
   } else {
     map.setTerrain(null);
     map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
@@ -514,9 +525,9 @@ document.getElementById('contourOpacity').addEventListener('input', e => {
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  map.setLayoutProperty('station-circle', 'visibility', v);
-  map.setLayoutProperty('station-label', 'visibility', v);
+  if (window._stnMarkers) {
+    window._stnMarkers.forEach(m => m.getElement().style.display = e.target.checked ? '' : 'none');
+  }
 });
 document.getElementById('chkRoute').addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';

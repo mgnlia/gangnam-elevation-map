@@ -163,7 +163,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
 <script>
-const DEFAULT_LOC = [126.9780, 37.5665]; // 서울시청 [lng, lat]
+const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
 // ===== Map (base only — contours added after load) =====
@@ -674,7 +674,7 @@ document.getElementById('btnLayers').addEventListener('click', () => {
   document.getElementById('legendBar').classList.remove('show');
 });
 document.getElementById('btnReset').addEventListener('click', () => {
-  map.flyTo({ center: SEOUL_CENTER, zoom: 14, pitch: 40, bearing: 0, duration: 1000 });
+  map.flyTo({ center: DEFAULT_LOC, zoom: 14, pitch: 40, bearing: 0, duration: 1000 });
 });
 
 let is3d = true;

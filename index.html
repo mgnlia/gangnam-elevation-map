@@ -75,16 +75,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 .moderate-badge { background: #E65100; }
 
 .stn {
-  background: #fff; border: 1.5px solid; border-radius: 3px;
-  padding: 0px 4px; font-size: 9.5px; font-weight: 600;
-  white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.12); line-height: 1.5;
+  background: #fff; border: 2px solid; border-radius: 4px;
+  padding: 2px 6px; font-size: 12px; font-weight: 700;
+  white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.25); line-height: 1.4;
+  letter-spacing: -0.3px;
 }
-.s2 { border-color: #33A23D; color: #33A23D; }
-.s3 { border-color: #FE5B10; color: #FE5B10; }
-.s7 { border-color: #6E8B2D; color: #6E8B2D; }
-.s9 { border-color: #AA9872; color: #AA9872; }
-.ss { border-color: #A71E31; color: #A71E31; }
-.sb { border-color: #b39500; color: #b39500; }
+.s2 { border-color: #2E8B37; color: #1a6b24; }
+.s3 { border-color: #E84D0E; color: #c43d08; }
+.s7 { border-color: #54711E; color: #3d5516; }
+.s9 { border-color: #8B7A50; color: #6b5c38; }
+.ss { border-color: #C41A30; color: #a01528; }
+.sb { border-color: #D4A017; color: #9a7510; }
 
 .peak-label {
   font-size: 10px; font-weight: 700; color: #C62828;
@@ -179,7 +180,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   <label><input type="radio" name="base" value="satellite"> 위성</label>
   <hr>
   <label>등고선 진하기</label>
-  <input type="range" id="contourOpacity" min="0" max="100" value="40">
+  <input type="range" id="contourOpacity" min="0" max="100" value="55">
   <hr>
   <label><input type="checkbox" id="chkHill" checked> 음영기복</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
@@ -246,10 +247,10 @@ const satBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/service
 
 // Contour lines only — use multiply blend to strip the background colors
 const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-  maxZoom: 17, opacity: 0.4, className: 'leaflet-contour-overlay'
+  maxZoom: 17, opacity: 0.55, className: 'leaflet-contour-overlay'
 });
 const hillOverlay = L.tileLayer('https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png', {
-  maxZoom: 17, opacity: 0.3
+  maxZoom: 17, opacity: 0.45
 });
 
 const map = L.map('map', {

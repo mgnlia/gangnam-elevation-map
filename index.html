@@ -10,13 +10,11 @@
 body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
 #map { width: 100%; height: 100vh; }
 
-/* Top bar */
 .top-bar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 1000;
   background: #fff; padding: 10px 14px;
   display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border-bottom: 1px solid #e8e8e8; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 .top-bar h1 { font-size: 15px; font-weight: 700; color: #333; }
 .top-bar h1 span { font-weight: 400; color: #999; font-size: 12px; }
@@ -27,7 +25,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 }
 .mode-tab.active { background: #fff; color: #333; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
-/* Bottom sheet */
 .bottom-sheet {
   position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000;
   background: #fff; border-radius: 16px 16px 0 0;
@@ -38,16 +35,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 .elev-info { display: flex; align-items: center; gap: 14px; }
 .elev-big { font-size: 34px; font-weight: 800; color: #333; line-height: 1; }
 .elev-big small { font-size: 14px; font-weight: 500; color: #999; }
-.elev-badge {
-  display: inline-block; padding: 3px 10px; border-radius: 12px;
-  font-size: 12px; font-weight: 700; margin-bottom: 2px;
-}
+.elev-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-bottom: 2px; }
 .badge-safe { background: #E8F5E9; color: #2E7D32; }
 .badge-warn { background: #FFF3E0; color: #E65100; }
 .badge-danger { background: #FFEBEE; color: #C62828; }
 .elev-coord { font-size: 11px; color: #bbb; }
 
-/* Compare */
 .compare-info { display: none; }
 .compare-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .compare-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
@@ -62,7 +55,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 .compare-verdict { font-size: 12px; color: #888; }
 .hint-text { font-size: 13px; color: #bbb; text-align: center; padding: 6px 0; }
 
-/* Contour opacity slider */
 .contour-control {
   position: absolute; top: 52px; left: 10px; z-index: 1000;
   background: #fff; border-radius: 10px; padding: 8px 12px;
@@ -74,7 +66,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 .contour-control input[type="range"] { width: 100px; }
 .contour-control hr { border: none; border-top: 1px solid #eee; margin: 5px 0; }
 
-/* Route badges */
 .flat-badge {
   background: #2E7D32; color: #fff; font-size: 10px; font-weight: 700;
   padding: 2px 7px; border-radius: 8px; white-space: nowrap;
@@ -83,12 +74,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 .caution-badge { background: #C62828; }
 .moderate-badge { background: #E65100; }
 
-/* Station */
 .stn {
   background: #fff; border: 1.5px solid; border-radius: 3px;
   padding: 0px 4px; font-size: 9.5px; font-weight: 600;
-  white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-  line-height: 1.5;
+  white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.12); line-height: 1.5;
 }
 .s2 { border-color: #33A23D; color: #33A23D; }
 .s3 { border-color: #FE5B10; color: #FE5B10; }
@@ -103,23 +92,36 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   white-space: nowrap;
 }
 
-/* FABs */
+/* Slope arrow markers */
+.slope-arrow {
+  font-size: 18px;
+  text-shadow: 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+}
+.slope-arrow-label {
+  font-size: 9px; font-weight: 700; color: #fff;
+  background: rgba(198,40,40,0.85);
+  padding: 1px 5px; border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.slope-arrow-label.moderate {
+  background: rgba(230,81,0,0.85);
+}
+
 .fab-col {
   position: absolute; right: 10px; z-index: 1000;
   display: flex; flex-direction: column; gap: 6px;
 }
-.fab-col.top { top: 52px; }
 .fab-col.bot { bottom: 110px; }
 .fab {
   width: 40px; height: 40px; border-radius: 50%; border: none;
   background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,0.15);
   font-size: 18px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: transform 0.15s;
+  display: flex; align-items: center; justify-content: center; transition: transform 0.15s;
 }
 .fab:active { transform: scale(0.9); }
 
-/* Legend */
 .legend-bar {
   position: absolute; top: 52px; right: 10px; z-index: 999;
   background: #fff; border-radius: 8px; padding: 6px 8px;
@@ -129,7 +131,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 .lg-row { display: flex; align-items: center; margin-bottom: 1px; }
 .lg-c { width: 14px; height: 8px; border-radius: 2px; margin-right: 4px; }
 
-/* Location pulse */
+/* Contour desaturate: mix-blend-mode to keep only the lines */
+.leaflet-contour-overlay {
+  mix-blend-mode: multiply;
+}
+
 @keyframes pulse {
   0% { box-shadow: 0 0 0 0 rgba(66,133,244,0.4); }
   70% { box-shadow: 0 0 0 14px rgba(66,133,244,0); }
@@ -137,8 +143,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 }
 .my-dot {
   width: 14px; height: 14px; background: #4285F4;
-  border: 2.5px solid #fff; border-radius: 50%;
-  animation: pulse 2s infinite;
+  border: 2.5px solid #fff; border-radius: 50%; animation: pulse 2s infinite;
 }
 </style>
 </head>
@@ -146,7 +151,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 
 <div id="map"></div>
 
-<!-- Top -->
 <div class="top-bar">
   <h1>🚴 강남 오르막 지도 <span>언덕 피해서 타자</span></h1>
   <div class="mode-tabs">
@@ -155,7 +159,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   </div>
 </div>
 
-<!-- Layer panel -->
 <div class="contour-control" id="layerPanel">
   <strong style="color:#333">레이어</strong>
   <hr>
@@ -163,31 +166,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   <label><input type="radio" name="base" value="satellite"> 위성</label>
   <hr>
   <label>등고선 진하기</label>
-  <input type="range" id="contourOpacity" min="0" max="100" value="45">
+  <input type="range" id="contourOpacity" min="0" max="100" value="40">
   <hr>
   <label><input type="checkbox" id="chkHill" checked> 음영기복</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkPeak" checked> ⛰️ 산</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
+  <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
 </div>
 
-<!-- Legend -->
 <div class="legend-bar">
-  <h4>🚴 경사 가이드</h4>
-  <div class="lg-row"><div class="lg-c" style="background:#4CAF50"></div>평지 — GO</div>
-  <div class="lg-row"><div class="lg-c" style="background:#FF9800"></div>오르막 주의</div>
-  <div class="lg-row"><div class="lg-c" style="background:#f44336"></div>급경사 회피</div>
-  <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px"><div class="lg-c" style="background:transparent;border:1.5px dashed #4CAF50"></div>추천 자전거길</div>
+  <h4>🚴 지도 범례</h4>
+  <div class="lg-row"><div class="lg-c" style="background:#4CAF50"></div>평지 자전거길</div>
+  <div class="lg-row"><div class="lg-c" style="background:#FF9800"></div>오르막 주의 구간</div>
+  <div class="lg-row"><div class="lg-c" style="background:#f44336"></div>급경사 회피 구간</div>
+  <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px">
+    <span style="margin-right:4px">🔺</span> 오르막 방향 화살표
+  </div>
+  <div class="lg-row">
+    <span style="font-size:9px;margin-right:4px">〰️</span> 등고선 (가까울수록 급경사)
+  </div>
 </div>
 
-<!-- FABs -->
 <div class="fab-col bot">
   <button class="fab" id="btnLayers" title="레이어">🗺️</button>
   <button class="fab" id="btnLocate" title="내 위치">📍</button>
   <button class="fab" id="btnReset" title="전체보기">↺</button>
 </div>
 
-<!-- Bottom sheet -->
 <div class="bottom-sheet" id="bottomSheet">
   <div class="sheet-handle"></div>
   <div id="exploreInfo"><div class="hint-text">지도를 탭하면 고도와 경사 판정을 볼 수 있어요</div></div>
@@ -218,20 +224,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
 const CENTER = [37.497, 127.047];
 const BOUNDS = [[37.464, 127.012], [37.532, 127.105]];
 
-// ===== Base: Clean Korean-style map (CartoDB Voyager = closest to Kakao look) =====
+// ===== Layers =====
 const cleanBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
   maxZoom: 19, subdomains: 'abcd',
-  attribution: '© <a href="https://carto.com/">CARTO</a> · © <a href="https://osm.org/">OSM</a>'
+  attribution: '© CARTO · © OSM'
 });
 const satBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 });
 
-// Contour overlay (OpenTopoMap rendered at partial opacity for contour lines)
+// Contour lines only — use multiply blend to strip the background colors
 const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-  maxZoom: 17, opacity: 0.45
+  maxZoom: 17, opacity: 0.4, className: 'leaflet-contour-overlay'
 });
-// Hillshade
 const hillOverlay = L.tileLayer('https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png', {
-  maxZoom: 17, opacity: 0.35
+  maxZoom: 17, opacity: 0.3
 });
 
 const map = L.map('map', {
@@ -242,23 +247,72 @@ const map = L.map('map', {
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 map.fitBounds(BOUNDS, { padding: [10, 60] });
 
-// ===== Contour opacity slider =====
+// Contour opacity slider
 document.getElementById('contourOpacity').addEventListener('input', e => {
   contourOverlay.setOpacity(e.target.value / 100);
 });
 
+// ===== Slope direction arrows =====
+// These show which direction is UPHILL with arrow + grade info
+// Placed at key cycling-relevant slope locations
+const slopeGrp = L.layerGroup();
+
+const slopeArrows = [
+  // [lat, lng, arrow emoji (pointing uphill direction), label, steep?]
+  // 대모산 approaches
+  { la:37.4790, lo:127.0780, dir:'↗️', label:'+80m 급경사', steep:true },
+  { la:37.4760, lo:127.0850, dir:'→', label:'+60m 급경사', steep:true },
+  { la:37.4810, lo:127.0870, dir:'↘️', label:'+50m 급경사', steep:true },
+  // 구룡산 approaches
+  { la:37.4820, lo:127.0580, dir:'↓', label:'+70m 급경사', steep:true },
+  { la:37.4760, lo:127.0650, dir:'↗️', label:'+90m 급경사', steep:true },
+  // 매봉산
+  { la:37.4880, lo:127.0400, dir:'↑', label:'+30m', steep:false },
+  { la:37.4930, lo:127.0420, dir:'↗️', label:'+25m', steep:false },
+  { la:37.4890, lo:127.0480, dir:'←', label:'+20m', steep:false },
+  // 우면산 approaches
+  { la:37.4810, lo:127.0120, dir:'↑', label:'+60m 급경사', steep:true },
+  { la:37.4750, lo:127.0050, dir:'↗️', label:'+80m 급경사', steep:true },
+  // 세곡동 hills
+  { la:37.4700, lo:127.0660, dir:'↓', label:'+35m', steep:false },
+  { la:37.4660, lo:127.0730, dir:'↗️', label:'+40m', steep:false },
+  // 역삼/도곡 minor hills
+  { la:37.4950, lo:127.0400, dir:'↑', label:'+15m', steep:false },
+  // 일원동
+  { la:37.4850, lo:127.0920, dir:'←', label:'+25m', steep:false },
+  // 개포동 toward 구룡산
+  { la:37.4800, lo:127.0560, dir:'↓', label:'+45m', steep:false },
+];
+
+slopeArrows.forEach(s => {
+  // Arrow
+  L.marker([s.la, s.lo], {
+    icon: L.divIcon({
+      html: `<div class="slope-arrow">${s.dir}</div>`,
+      className: '', iconSize: [20, 20], iconAnchor: [10, 10]
+    }), interactive: false, zIndexOffset: 500
+  }).addTo(slopeGrp);
+  // Label slightly offset
+  L.marker([s.la + 0.001, s.lo + 0.001], {
+    icon: L.divIcon({
+      html: `<div class="slope-arrow-label ${s.steep ? '' : 'moderate'}">${s.label}</div>`,
+      className: '', iconAnchor: [0, 0]
+    }), interactive: false, zIndexOffset: 500
+  }).addTo(slopeGrp);
+});
+slopeGrp.addTo(map);
+
 // ===== Flat routes =====
 const routeGrp = L.layerGroup();
-
 const flatPaths = [
-  { n:'탄천 자전거길', pts:[[37.5145,127.0946],[37.5100,127.0920],[37.5040,127.0870],[37.4970,127.0810],[37.4910,127.0770],[37.4850,127.0730],[37.4780,127.0680],[37.4720,127.0640],[37.4665,127.0610]]},
-  { n:'양재천 자전거길', pts:[[37.4842,127.0352],[37.4835,127.0420],[37.4830,127.0490],[37.4828,127.0560],[37.4825,127.0630],[37.4822,127.0700],[37.4820,127.0750]]},
-  { n:'한강 자전거길', pts:[[37.5240,127.0100],[37.5250,127.0200],[37.5260,127.0300],[37.5270,127.0400],[37.5265,127.0500],[37.5260,127.0600],[37.5255,127.0700],[37.5250,127.0800],[37.5245,127.0900],[37.5240,127.1000]]},
-  { n:'테헤란로', pts:[[37.4979,127.0276],[37.4990,127.0330],[37.5007,127.0366],[37.5025,127.0420],[37.5045,127.0490],[37.5065,127.0560],[37.5088,127.0639]]},
+  { n:'탄천 자전거길 (평지)', pts:[[37.5145,127.0946],[37.5100,127.0920],[37.5040,127.0870],[37.4970,127.0810],[37.4910,127.0770],[37.4850,127.0730],[37.4780,127.0680],[37.4720,127.0640],[37.4665,127.0610]]},
+  { n:'양재천 자전거길 (평지)', pts:[[37.4842,127.0352],[37.4835,127.0420],[37.4830,127.0490],[37.4828,127.0560],[37.4825,127.0630],[37.4822,127.0700],[37.4820,127.0750]]},
+  { n:'한강 자전거길 (평지)', pts:[[37.5240,127.0100],[37.5250,127.0200],[37.5260,127.0300],[37.5270,127.0400],[37.5265,127.0500],[37.5260,127.0600],[37.5255,127.0700],[37.5250,127.0800],[37.5245,127.0900],[37.5240,127.1000]]},
+  { n:'테헤란로 (비교적 평지)', pts:[[37.4979,127.0276],[37.4990,127.0330],[37.5007,127.0366],[37.5025,127.0420],[37.5045,127.0490],[37.5065,127.0560],[37.5088,127.0639]]},
 ];
 flatPaths.forEach(r => {
   L.polyline(r.pts, { color: '#4CAF50', weight: 4, opacity: 0.65, lineCap: 'round' })
-    .bindPopup(`<b>🟢 ${r.n}</b><br>평탄한 자전거 구간`).addTo(routeGrp);
+    .bindPopup(`<b>🟢 ${r.n}</b><br>자전거 타기 좋은 평탄 구간`).addTo(routeGrp);
   const m = r.pts[Math.floor(r.pts.length/2)];
   L.marker(m, { icon: L.divIcon({ html:`<div class="flat-badge">🟢 ${r.n}</div>`, className:'', iconAnchor:[0,0]}), interactive:false }).addTo(routeGrp);
 });
@@ -271,8 +325,8 @@ const cautionAreas = [
 ];
 cautionAreas.forEach(z => {
   const col = z.steep ? '#f44336' : '#FF9800';
-  L.circle(z.c, { radius:z.r, color:col, fillColor:col, fillOpacity:0.10, weight:1.5, dashArray:'5,4' })
-    .bindPopup(`<b>${z.steep?'🔴':'🟠'} ${z.n}</b><br>${z.steep?'급경사 — 자전거 회피':'오르막 주의'}`).addTo(routeGrp);
+  L.circle(z.c, { radius:z.r, color:col, fillColor:col, fillOpacity:0.08, weight:1.5, dashArray:'5,4' })
+    .bindPopup(`<b>${z.steep?'🔴':'🟠'} ${z.n}</b><br>${z.steep?'급경사 — 자전거 회피 권장':'오르막 주의'}`).addTo(routeGrp);
   L.marker(z.c, { icon: L.divIcon({ html:`<div class="flat-badge ${z.steep?'caution-badge':'moderate-badge'}">${z.steep?'🔴':'🟠'} ${z.n}</div>`, className:'', iconAnchor:[0,0]}), interactive:false }).addTo(routeGrp);
 });
 routeGrp.addTo(map);
@@ -296,10 +350,7 @@ const stnGrp = L.layerGroup();
   {n:'한티',la:37.4984,lo:127.0561,c:'sb'},{n:'구룡',la:37.4847,lo:127.0538,c:'sb'},
   {n:'개포동',la:37.4787,lo:127.0549,c:'sb'},{n:'대모산입구',la:37.4765,lo:127.0772,c:'sb'},
 ].forEach(s => {
-  L.marker([s.la,s.lo], {
-    icon: L.divIcon({ html:`<div class="stn ${s.c}">${s.n}</div>`, className:'', iconAnchor:[0,-2] }),
-    interactive: false
-  }).addTo(stnGrp);
+  L.marker([s.la,s.lo], { icon: L.divIcon({ html:`<div class="stn ${s.c}">${s.n}</div>`, className:'', iconAnchor:[0,-2]}), interactive:false }).addTo(stnGrp);
 });
 stnGrp.addTo(map);
 
@@ -309,10 +360,7 @@ const peakGrp = L.layerGroup();
   {n:'대모산 293m',la:37.4730,lo:127.0830},{n:'구룡산 306m',la:37.4785,lo:127.0620},
   {n:'매봉산 101m',la:37.4910,lo:127.0450},{n:'우면산 293m',la:37.4780,lo:127.0080},
 ].forEach(h => {
-  L.marker([h.la,h.lo], {
-    icon: L.divIcon({ html:`<div class="peak-label">⛰️ ${h.n}</div>`, className:'', iconAnchor:[0,8] }),
-    interactive: false
-  }).addTo(peakGrp);
+  L.marker([h.la,h.lo], { icon: L.divIcon({ html:`<div class="peak-label">⛰️ ${h.n}</div>`, className:'', iconAnchor:[0,8]}), interactive:false }).addTo(peakGrp);
 });
 peakGrp.addTo(map);
 
@@ -326,7 +374,7 @@ document.getElementById('chkHill').addEventListener('change', e => e.target.chec
 document.getElementById('chkStation').addEventListener('change', e => e.target.checked ? map.addLayer(stnGrp) : map.removeLayer(stnGrp));
 document.getElementById('chkPeak').addEventListener('change', e => e.target.checked ? map.addLayer(peakGrp) : map.removeLayer(peakGrp));
 document.getElementById('chkRoute').addEventListener('change', e => e.target.checked ? map.addLayer(routeGrp) : map.removeLayer(routeGrp));
-
+document.getElementById('chkSlope').addEventListener('change', e => e.target.checked ? map.addLayer(slopeGrp) : map.removeLayer(slopeGrp));
 document.getElementById('btnLayers').addEventListener('click', () => document.getElementById('layerPanel').classList.toggle('show'));
 document.getElementById('btnReset').addEventListener('click', () => map.fitBounds(BOUNDS, { padding:[10,60] }));
 
@@ -376,10 +424,26 @@ function resetCmp() {
 }
 
 function gradeInfo(elev) {
-  if (elev > 80) return { text:'급경사 — 회피 권장 🚫', cls:'badge-danger', color:'#C62828' };
+  if (elev > 80) return { text:'급경사 구간 — 회피 권장 🚫', cls:'badge-danger', color:'#C62828' };
   if (elev > 40) return { text:'오르막 주의 ⚠️', cls:'badge-warn', color:'#E65100' };
   return { text:'평지 — 자전거 OK 🚴', cls:'badge-safe', color:'#2E7D32' };
 }
+
+// Arrow decorator for compare line
+function makeArrow(from, to, color) {
+  const dx = to[1]-from[1], dy = to[0]-from[0];
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  const midLat = (from[0]+to[0])/2, midLng = (from[1]+to[1])/2;
+  // Rotated arrow at midpoint
+  return L.marker([midLat, midLng], {
+    icon: L.divIcon({
+      html: `<div style="font-size:24px;transform:rotate(${-angle+90}deg);color:${color};text-shadow:0 0 4px #fff,0 0 4px #fff;">⬆</div>`,
+      className: '', iconSize: [24,24], iconAnchor: [12,12]
+    }), interactive: false
+  });
+}
+
+let cmpArrowMk = null;
 
 map.on('click', async e => {
   const {lat,lng} = e.latlng;
@@ -417,6 +481,7 @@ map.on('click', async e => {
     else if (cmpState===1) {
       if(mkB) map.removeLayer(mkB);
       if(cmpLine) map.removeLayer(cmpLine);
+      if(cmpArrowMk) map.removeLayer(cmpArrowMk);
       mkB = L.circleMarker([lat,lng],{radius:7,color:'#2196F3',fillColor:'#2196F3',fillOpacity:0.9}).addTo(map);
       cmpLine = L.polyline([[ptA.lat,ptA.lng],[lat,lng]],{color:'#555',weight:2,dashArray:'5,5',opacity:0.5}).addTo(map);
       ptB = {lat,lng,e:null};
@@ -429,17 +494,27 @@ map.on('click', async e => {
         document.getElementById('elevB').textContent=ptB.e+'m';
         const d = ptB.e - ptA.e, ad = Math.abs(d);
         let arr,col,vd;
-        if (d>10) { arr='📈'; col='#C62828'; vd=ad>30?'오르막 심함! 다른 길 찾아보세요':'약간 오르막 — 힘들 수 있음'; }
+        if (d>10) { arr='📈'; col='#C62828'; vd=ad>30?'오르막 심함! 🚫 다른 길 추천':'약간 오르막 — 힘들 수 있음'; }
         else if (d<-10) { arr='📉'; col='#2E7D32'; vd='내리막! 편하게 갈 수 있어요 🎉'; }
-        else { arr='➡️'; col='#2E7D32'; vd='거의 평지! 자전거 타기 좋아요 🚴'; }
+        else { arr='➡️'; col='#2E7D32'; vd='거의 평지! 자전거 OK 🚴'; }
         document.getElementById('diffArrow').textContent=arr;
         document.getElementById('diffText').style.color=col;
         document.getElementById('diffText').textContent=`${d>0?'+':''}${d}m`;
         document.getElementById('diffVerdict').textContent=vd;
+
+        // Direction arrow on the line (points from A to B, colored by slope)
+        const arrowCol = d > 10 ? '#C62828' : d < -10 ? '#2E7D32' : '#888';
+        cmpArrowMk = makeArrow([ptA.lat,ptA.lng],[lat,lng], arrowCol);
+        cmpArrowMk.addTo(map);
+
         cmpState=2;
       } else { document.getElementById('compareHint').textContent='⚠️ 실패, 다시 탭'; document.getElementById('compareHint').style.display='block'; }
     }
-    else if (cmpState===2) { resetCmp(); map.fire('click',e); }
+    else if (cmpState===2) {
+      if(cmpArrowMk) map.removeLayer(cmpArrowMk);
+      resetCmp();
+      map.fire('click',e);
+    }
   }
 });
 </script>

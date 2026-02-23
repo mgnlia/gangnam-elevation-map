@@ -173,7 +173,9 @@ const map = new maplibregl.Map({
     sources: {
       'carto': {
         type: 'raster',
-        tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
+        tiles: [/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+          ? 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+          : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
         tileSize: 256,
         attribution: '© CARTO · © OSM'
       },
@@ -190,8 +192,7 @@ const map = new maplibregl.Map({
       }
     },
     layers: [
-      { id: 'base', type: 'raster', source: 'carto' },
-      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } }
+      { id: 'base', type: 'raster', source: 'carto' }
     ],
     terrain: { source: 'terrain-dem', exaggeration: 4.0 }
   },
@@ -204,6 +205,15 @@ const map = new maplibregl.Map({
   dragRotate: true,
   touchZoomRotate: true
 });
+
+// Hillshade only on desktop (redundant with 3D terrain on mobile, saves GPU)
+if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+  map.on('load', () => {
+    if (!map.getLayer('hill-overlay')) {
+      map.addLayer({ id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } }, map.getStyle().layers[1]?.id);
+    }
+  });
+}
 
 // Nav controls
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-left');
@@ -232,7 +242,7 @@ map.on('load', () => {
       tiles: [demSource.contourProtocolUrl({
         multiplier: 1,
         overzoom: 1,
-        thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },
+        thresholds: { 11: [100], 12: [50], 13: [20,100], 14: [10,50], 15: [10,50] },
         elevationKey: 'ele',
         levelKey: 'level',
         contourLayer: 'contours'
@@ -286,8 +296,7 @@ map.on('load', () => {
   });
   map.addLayer({ id: 'flat-routes-label', type: 'symbol', source: 'flat-routes',
     layout: { 'symbol-placement': 'line-center', 'text-field': ['concat', '🟢 ', ['get', 'name']],
-      'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
-      'text-allow-overlap': true
+      'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold']
     },
     paint: { 'text-color': '#1B5E20', 'text-halo-color': '#fff', 'text-halo-width': 2 }
   });
@@ -377,8 +386,18 @@ map.on('load', () => {
       .addTo(map);
     stnMarkers.push(marker);
   });
-  // Save for toggle
+  // Save for toggle + zoom-based visibility
   window._stnMarkers = stnMarkers;
+  window._stnVisible = true;
+
+  // Hide station HTML markers when zoomed out (big perf win — 28 DOM repositions per frame)
+  function updateStnZoomVis() {
+    if (!window._stnVisible) return; // user toggled off
+    const show = map.getZoom() >= 13;
+    stnMarkers.forEach(m => m.getElement().style.display = show ? '' : 'none');
+  }
+  map.on('zoom', updateStnZoomVis);
+  updateStnZoomVis();
 
   // --- Slope arrows ---
   const slopes = [
@@ -404,10 +423,11 @@ map.on('load', () => {
   }));
   map.addSource('slopes', { type: 'geojson', data: { type: 'FeatureCollection', features: slopeFeatures } });
   map.addLayer({ id: 'slope-arrow', type: 'symbol', source: 'slopes',
+    minzoom: 13,
     layout: {
       'text-field': ['concat', ['get','dir'], ' ', ['get','label']],
       'text-size': 14, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
-      'text-allow-overlap': true
+      'text-allow-overlap': false
     },
     paint: {
       'text-color': ['case', ['get','steep'], '#C62828', '#E65100'],
@@ -468,7 +488,7 @@ map.on('load', () => {
 
   // Road slope line (subtle colored underline)
   map.addLayer({
-    id: 'road-slope-line', type: 'line', source: 'road-slopes',
+    id: 'road-slope-line', type: 'line', source: 'road-slopes', minzoom: 13,
     paint: {
       'line-color': ['match', ['get','grade'], 1,'rgba(76,175,80,0.3)', 2,'rgba(255,152,0,0.3)', 'rgba(244,67,54,0.3)'],
       'line-width': ['match', ['get','grade'], 1,6, 2,8, 10],
@@ -478,7 +498,7 @@ map.on('load', () => {
 
   // Arrows along road (pointing uphill)
   map.addLayer({
-    id: 'road-slope-arrows', type: 'symbol', source: 'road-slopes',
+    id: 'road-slope-arrows', type: 'symbol', source: 'road-slopes', minzoom: 13,
     layout: {
       'symbol-placement': 'line',
       'text-field': ['get', 'arrows'],
@@ -486,7 +506,7 @@ map.on('load', () => {
       'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
       'text-keep-upright': false,
       'symbol-spacing': ['match', ['get','grade'], 1,80, 2,60, 45],
-      'text-allow-overlap': true,
+      'text-allow-overlap': false,
       'text-rotation-alignment': 'map',
       'text-pitch-alignment': 'map'
     },
@@ -499,7 +519,7 @@ map.on('load', () => {
 
   // Road name labels
   map.addLayer({
-    id: 'road-slope-labels', type: 'symbol', source: 'road-slopes',
+    id: 'road-slope-labels', type: 'symbol', source: 'road-slopes', minzoom: 14,
     layout: {
       'symbol-placement': 'line-center',
       'text-field': ['get', 'name'],
@@ -543,37 +563,23 @@ map.on('load', () => {
   }));
   map.addSource('local-max', { type: 'geojson', data: { type: 'FeatureCollection', features: maxCircles } });
 
-  // Outer glow
-  map.addLayer({
-    id: 'local-max-glow', type: 'circle', source: 'local-max',
-    paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, ['/', ['get','radius'], 40], 15, ['/', ['get','radius'], 8]],
-      'circle-color': [
-        'interpolate', ['linear'], ['get','elev'],
-        40, 'rgba(255, 236, 179, 0.2)',   // 낮은 언덕: 연한 노랑
-        100, 'rgba(255, 204, 128, 0.25)',  // 중간: 연한 주황
-        200, 'rgba(255, 171, 145, 0.3)'    // 높은 산: 연한 빨강
-      ],
-      'circle-blur': 0.8
-    }
-  }, 'flat-routes-line');
-
-  // Inner highlight
+  // Elevation highlight (single layer, no blur — saves GPU)
   map.addLayer({
     id: 'local-max-core', type: 'circle', source: 'local-max',
+    minzoom: 12,
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 10],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, ['/', ['get','radius'], 35], 15, ['/', ['get','radius'], 8]],
       'circle-color': [
         'interpolate', ['linear'], ['get','elev'],
-        40, 'rgba(255, 224, 130, 0.5)',
-        100, 'rgba(255, 183, 77, 0.55)',
-        200, 'rgba(255, 138, 101, 0.6)'
+        40, 'rgba(255, 224, 130, 0.3)',
+        100, 'rgba(255, 183, 77, 0.35)',
+        200, 'rgba(255, 138, 101, 0.4)'
       ],
       'circle-stroke-color': [
         'interpolate', ['linear'], ['get','elev'],
-        40, 'rgba(255, 193, 7, 0.4)',
-        100, 'rgba(255, 152, 0, 0.45)',
-        200, 'rgba(244, 67, 54, 0.5)'
+        40, 'rgba(255, 193, 7, 0.3)',
+        100, 'rgba(255, 152, 0, 0.35)',
+        200, 'rgba(244, 67, 54, 0.4)'
       ],
       'circle-stroke-width': 1.5
     }
@@ -581,7 +587,7 @@ map.on('load', () => {
 
   // Elevation label on each local max
   map.addLayer({
-    id: 'local-max-label', type: 'symbol', source: 'local-max',
+    id: 'local-max-label', type: 'symbol', source: 'local-max', minzoom: 13,
     layout: {
       'text-field': ['concat', ['get','elev'], 'm'],
       'text-size': 10,
@@ -628,7 +634,7 @@ let locMarker = null;
 function addLocMarker(lnglat) {
   if (locMarker) locMarker.remove();
   locMarkerEl = document.createElement('div');
-  locMarkerEl.innerHTML = '<div style="width:18px;height:18px;background:#4285F4;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 0 rgba(66,133,244,0.5),0 1px 4px rgba(0,0,0,0.3);animation:pulse 2s infinite"></div>';
+  locMarkerEl.innerHTML = '<div style="width:18px;height:18px;background:#4285F4;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>';
   locMarker = new maplibregl.Marker({ element: locMarkerEl }).setLngLat(lnglat).addTo(map);
 }
 
@@ -689,8 +695,10 @@ document.getElementById('contourOpacity').addEventListener('input', e => {
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {
+  window._stnVisible = e.target.checked;
   if (window._stnMarkers) {
-    window._stnMarkers.forEach(m => m.getElement().style.display = e.target.checked ? '' : 'none');
+    const show = e.target.checked && map.getZoom() >= 13;
+    window._stnMarkers.forEach(m => m.getElement().style.display = show ? '' : 'none');
   }
 });
 document.getElementById('chkRoute').addEventListener('change', e => {

@@ -4,161 +4,97 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>강남 자전거 고도 지도 🚴</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
-#map { width: 100%; height: 100vh; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',sans-serif}
+#map{width:100%;height:100vh}
 
-.top-bar {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 1000;
-  background: #fff; padding: 10px 14px;
-  display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid #e8e8e8; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+.top-bar{
+  position:absolute;top:0;left:0;right:0;z-index:10;
+  background:#fff;padding:10px 14px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid #e8e8e8;box-shadow:0 1px 4px rgba(0,0,0,0.06);
 }
-.top-bar h1 { font-size: 15px; font-weight: 700; color: #333; }
-.top-bar h1 span { font-weight: 400; color: #999; font-size: 12px; }
-.mode-tabs { display: flex; gap: 2px; background: #f2f2f2; border-radius: 8px; padding: 2px; }
-.mode-tab {
-  padding: 5px 14px; border: none; border-radius: 7px; background: transparent;
-  color: #888; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+.top-bar h1{font-size:15px;font-weight:700;color:#333}
+.top-bar h1 span{font-weight:400;color:#999;font-size:12px}
+.mode-tabs{display:flex;gap:2px;background:#f2f2f2;border-radius:8px;padding:2px}
+.mode-tab{
+  padding:5px 14px;border:none;border-radius:7px;background:transparent;
+  color:#888;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
 }
-.mode-tab.active { background: #fff; color: #333; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.mode-tab.active{background:#fff;color:#333;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
 
-.bottom-sheet {
-  position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000;
-  background: #fff; border-radius: 16px 16px 0 0;
-  padding: 10px 16px; padding-bottom: max(14px, env(safe-area-inset-bottom));
-  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+.bottom-sheet{
+  position:absolute;bottom:0;left:0;right:0;z-index:10;
+  background:#fff;border-radius:16px 16px 0 0;
+  padding:10px 16px;padding-bottom:max(14px,env(safe-area-inset-bottom));
+  box-shadow:0 -2px 12px rgba(0,0,0,0.08);
 }
-.sheet-handle { width: 36px; height: 4px; background: #ddd; border-radius: 2px; margin: 0 auto 10px; }
-.elev-info { display: flex; align-items: center; gap: 14px; }
-.elev-big { font-size: 34px; font-weight: 800; color: #333; line-height: 1; }
-.elev-big small { font-size: 14px; font-weight: 500; color: #999; }
-.elev-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-bottom: 2px; }
-.badge-safe { background: #E8F5E9; color: #2E7D32; }
-.badge-warn { background: #FFF3E0; color: #E65100; }
-.badge-danger { background: #FFEBEE; color: #C62828; }
-.elev-coord { font-size: 11px; color: #bbb; }
+.sheet-handle{width:36px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 10px}
+.elev-info{display:flex;align-items:center;gap:14px}
+.elev-big{font-size:34px;font-weight:800;color:#333;line-height:1}
+.elev-big small{font-size:14px;font-weight:500;color:#999}
+.elev-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;margin-bottom:2px}
+.badge-safe{background:#E8F5E9;color:#2E7D32}
+.badge-warn{background:#FFF3E0;color:#E65100}
+.badge-danger{background:#FFEBEE;color:#C62828}
+.elev-coord{font-size:11px;color:#bbb}
 
-.compare-info { display: none; }
-.compare-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.compare-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.compare-label { font-size: 11px; color: #999; }
-.compare-elev { font-size: 15px; font-weight: 700; color: #333; }
-.compare-result-box {
-  background: #f8f8f8; border-radius: 10px; padding: 10px 14px;
-  margin-top: 6px; display: flex; align-items: center; gap: 12px;
-}
-.compare-arrow { font-size: 22px; }
-.compare-diff { font-size: 20px; font-weight: 800; }
-.compare-verdict { font-size: 12px; color: #888; }
-.hint-text { font-size: 13px; color: #bbb; text-align: center; padding: 6px 0; }
+.compare-info{display:none}
+.compare-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.compare-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.compare-label{font-size:11px;color:#999}
+.compare-elev{font-size:15px;font-weight:700;color:#333}
+.compare-result-box{background:#f8f8f8;border-radius:10px;padding:10px 14px;margin-top:6px;display:flex;align-items:center;gap:12px}
+.compare-arrow{font-size:22px}
+.compare-diff{font-size:20px;font-weight:800}
+.compare-verdict{font-size:12px;color:#888}
+.hint-text{font-size:13px;color:#bbb;text-align:center;padding:6px 0}
 
-.contour-control {
-  position: absolute; top: 52px; left: 10px; z-index: 1000;
-  background: #fff; border-radius: 10px; padding: 8px 12px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.1); font-size: 11px; color: #666;
-  display: none;
+.ctrl-panel{
+  position:absolute;top:52px;left:10px;z-index:10;
+  background:#fff;border-radius:10px;padding:8px 12px;
+  box-shadow:0 1px 6px rgba(0,0,0,0.1);font-size:11px;color:#666;
+  display:none;
 }
-.contour-control.show { display: block; }
-.contour-control label { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; cursor: pointer; }
-.contour-control input[type="range"] { width: 100px; }
-.contour-control hr { border: none; border-top: 1px solid #eee; margin: 5px 0; }
+.ctrl-panel.show{display:block}
+.ctrl-panel label{display:flex;align-items:center;gap:6px;margin-bottom:3px;cursor:pointer}
+.ctrl-panel input[type="range"]{width:100px}
+.ctrl-panel hr{border:none;border-top:1px solid #eee;margin:5px 0}
 
-.flat-badge {
-  background: #2E7D32; color: #fff; font-size: 10px; font-weight: 700;
-  padding: 2px 7px; border-radius: 8px; white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+.legend-bar{
+  position:absolute;top:52px;right:10px;z-index:9;
+  background:#fff;border-radius:8px;padding:6px 8px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.1);font-size:10px;color:#888;
 }
-.caution-badge { background: #C62828; }
-.moderate-badge { background: #E65100; }
+.legend-bar h4{font-size:11px;color:#555;margin-bottom:3px}
+.lg-row{display:flex;align-items:center;margin-bottom:1px}
+.lg-c{width:14px;height:8px;border-radius:2px;margin-right:4px}
 
-.stn {
-  background: #fff; border: 2px solid; border-radius: 4px;
-  padding: 2px 6px; font-size: 12px; font-weight: 700;
-  white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.25); line-height: 1.4;
-  letter-spacing: -0.3px;
+.fab-col{
+  position:absolute;right:10px;z-index:10;
+  display:flex;flex-direction:column;gap:8px;
 }
-.s2 { border-color: #2E8B37; color: #1a6b24; }
-.s3 { border-color: #E84D0E; color: #c43d08; }
-.s7 { border-color: #54711E; color: #3d5516; }
-.s9 { border-color: #8B7A50; color: #6b5c38; }
-.ss { border-color: #C41A30; color: #a01528; }
-.sb { border-color: #D4A017; color: #9a7510; }
+.fab-col.bot{bottom:130px}
+@media(max-width:600px){.fab-col.bot{bottom:100px}}
+.fab{
+  width:44px;height:44px;border-radius:50%;border:none;
+  background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .15s;-webkit-tap-highlight-color:transparent;
+}
+.fab:active{transform:scale(0.9)}
+.fab-locate{width:48px;height:48px;font-size:22px;background:#4285F4;color:#fff;box-shadow:0 2px 10px rgba(66,133,244,0.4)}
 
-.peak-label {
-  font-size: 10px; font-weight: 700; color: #C62828;
-  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
-  white-space: nowrap;
+.pitch-hint{
+  position:absolute;bottom:130px;left:50%;transform:translateX(-50%);z-index:10;
+  background:rgba(0,0,0,0.7);color:#fff;border-radius:20px;
+  padding:6px 14px;font-size:12px;pointer-events:none;
+  opacity:0;transition:opacity .5s;
 }
-
-/* Slope arrow markers */
-.slope-arrow {
-  font-size: 18px;
-  text-shadow: 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
-}
-.slope-arrow-label {
-  font-size: 9px; font-weight: 700; color: #fff;
-  background: rgba(198,40,40,0.85);
-  padding: 1px 5px; border-radius: 6px;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-.slope-arrow-label.moderate {
-  background: rgba(230,81,0,0.85);
-}
-
-.fab-col {
-  position: absolute; right: 10px; z-index: 1001;
-  display: flex; flex-direction: column; gap: 8px;
-}
-.fab-col.bot { bottom: 130px; }
-@media (max-width: 600px) { .fab-col.bot { bottom: 100px; } }
-.fab {
-  width: 44px; height: 44px; border-radius: 50%; border: none;
-  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  font-size: 20px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: transform 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-.fab:active { transform: scale(0.9); }
-
-/* Mobile: prominent locate button */
-.fab-locate {
-  width: 48px; height: 48px; font-size: 22px;
-  background: #4285F4; color: #fff;
-  box-shadow: 0 2px 10px rgba(66,133,244,0.4);
-}
-
-.legend-bar {
-  position: absolute; top: 52px; right: 10px; z-index: 999;
-  background: #fff; border-radius: 8px; padding: 6px 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1); font-size: 10px; color: #888;
-}
-.legend-bar h4 { font-size: 11px; color: #555; margin-bottom: 3px; }
-.lg-row { display: flex; align-items: center; margin-bottom: 1px; }
-.lg-c { width: 14px; height: 8px; border-radius: 2px; margin-right: 4px; }
-
-/* Contour desaturate: mix-blend-mode to keep only the lines */
-.leaflet-contour-overlay {
-  mix-blend-mode: multiply;
-}
-
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(66,133,244,0.5); }
-  70% { box-shadow: 0 0 0 20px rgba(66,133,244,0); }
-  100% { box-shadow: 0 0 0 0 rgba(66,133,244,0); }
-}
-.my-dot {
-  width: 18px; height: 18px; background: #4285F4;
-  border: 3px solid #fff; border-radius: 50%;
-  animation: pulse 2s infinite;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-}
-/* Accuracy circle more visible */
-.loc-accuracy { opacity: 0.15; }
+.pitch-hint.show{opacity:1}
 </style>
 </head>
 <body>
@@ -173,18 +109,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   </div>
 </div>
 
-<div class="contour-control" id="layerPanel">
+<div class="ctrl-panel" id="layerPanel">
   <strong style="color:#333">레이어</strong>
-  <hr>
-  <label><input type="radio" name="base" value="clean" checked> 기본 지도</label>
-  <label><input type="radio" name="base" value="satellite"> 위성</label>
   <hr>
   <label>등고선 진하기</label>
   <input type="range" id="contourOpacity" min="0" max="100" value="55">
   <hr>
-  <label><input type="checkbox" id="chkHill" checked> 음영기복</label>
+  <label><input type="checkbox" id="chk3d" checked> 🏔️ 3D 지형</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
-  <label><input type="checkbox" id="chkPeak" checked> ⛰️ 산</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
   <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
 </div>
@@ -195,10 +127,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   <div class="lg-row"><div class="lg-c" style="background:#FF9800"></div>오르막 주의 구간</div>
   <div class="lg-row"><div class="lg-c" style="background:#f44336"></div>급경사 회피 구간</div>
   <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px">
-    <span style="margin-right:4px">🔺</span> 오르막 방향 화살표
+    <span style="margin-right:4px">🔺</span> 오르막 방향
   </div>
-  <div class="lg-row">
-    <span style="font-size:9px;margin-right:4px">〰️</span> 등고선 (가까울수록 급경사)
+  <div class="lg-row"><span style="font-size:9px;margin-right:4px">〰️</span> 등고선</div>
+  <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px;color:#666">
+    🤏 두 손가락 회전/기울이기
   </div>
 </div>
 
@@ -206,9 +139,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   <button class="fab" id="btnLayers" title="레이어">🗺️</button>
   <button class="fab fab-locate" id="btnLocate" title="내 위치">📍</button>
   <button class="fab" id="btnReset" title="전체보기">↺</button>
+  <button class="fab" id="btn3dToggle" title="3D/2D 전환">🏔️</button>
 </div>
 
-<div class="bottom-sheet" id="bottomSheet">
+<div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 & 기울이기</div>
+
+<div class="bottom-sheet">
   <div class="sheet-handle"></div>
   <div id="exploreInfo"><div class="hint-text">지도를 탭하면 고도와 경사 판정을 볼 수 있어요</div></div>
   <div class="compare-info" id="compareInfo">
@@ -233,292 +169,389 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'N
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
-const CENTER = [37.497, 127.047];
-const BOUNDS = [[37.464, 127.012], [37.532, 127.105]];
+const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
+const GANGNAM_CENTER = [127.047, 37.497];
 
-// ===== Layers =====
-const cleanBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, subdomains: 'abcd',
-  attribution: '© CARTO · © OSM'
-});
-const satBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 });
-
-// Contour lines only — use multiply blend to strip the background colors
-const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-  maxZoom: 17, opacity: 0.55, className: 'leaflet-contour-overlay'
-});
-const hillOverlay = L.tileLayer('https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png', {
-  maxZoom: 17, opacity: 0.45
-});
-
-const map = L.map('map', {
-  center: CENTER, zoom: 14,
-  layers: [cleanBase, contourOverlay, hillOverlay],
-  zoomControl: false
-});
-L.control.zoom({ position: 'bottomleft' }).addTo(map);
-map.fitBounds(BOUNDS, { padding: [10, 60] });
-
-// Contour opacity slider
-document.getElementById('contourOpacity').addEventListener('input', e => {
-  contourOverlay.setOpacity(e.target.value / 100);
-});
-
-// ===== Slope direction arrows =====
-// These show which direction is UPHILL with arrow + grade info
-// Placed at key cycling-relevant slope locations
-const slopeGrp = L.layerGroup();
-
-const slopeArrows = [
-  // [lat, lng, arrow emoji (pointing uphill direction), label, steep?]
-  // 대모산 approaches
-  { la:37.4790, lo:127.0780, dir:'↗️', label:'+80m 급경사', steep:true },
-  { la:37.4760, lo:127.0850, dir:'→', label:'+60m 급경사', steep:true },
-  { la:37.4810, lo:127.0870, dir:'↘️', label:'+50m 급경사', steep:true },
-  // 구룡산 approaches
-  { la:37.4820, lo:127.0580, dir:'↓', label:'+70m 급경사', steep:true },
-  { la:37.4760, lo:127.0650, dir:'↗️', label:'+90m 급경사', steep:true },
-  // 매봉산
-  { la:37.4880, lo:127.0400, dir:'↑', label:'+30m', steep:false },
-  { la:37.4930, lo:127.0420, dir:'↗️', label:'+25m', steep:false },
-  { la:37.4890, lo:127.0480, dir:'←', label:'+20m', steep:false },
-  // 우면산 approaches
-  { la:37.4810, lo:127.0120, dir:'↑', label:'+60m 급경사', steep:true },
-  { la:37.4750, lo:127.0050, dir:'↗️', label:'+80m 급경사', steep:true },
-  // 세곡동 hills
-  { la:37.4700, lo:127.0660, dir:'↓', label:'+35m', steep:false },
-  { la:37.4660, lo:127.0730, dir:'↗️', label:'+40m', steep:false },
-  // 역삼/도곡 minor hills
-  { la:37.4950, lo:127.0400, dir:'↑', label:'+15m', steep:false },
-  // 일원동
-  { la:37.4850, lo:127.0920, dir:'←', label:'+25m', steep:false },
-  // 개포동 toward 구룡산
-  { la:37.4800, lo:127.0560, dir:'↓', label:'+45m', steep:false },
-];
-
-slopeArrows.forEach(s => {
-  // Arrow
-  L.marker([s.la, s.lo], {
-    icon: L.divIcon({
-      html: `<div class="slope-arrow">${s.dir}</div>`,
-      className: '', iconSize: [20, 20], iconAnchor: [10, 10]
-    }), interactive: false, zIndexOffset: 500
-  }).addTo(slopeGrp);
-  // Label slightly offset
-  L.marker([s.la + 0.001, s.lo + 0.001], {
-    icon: L.divIcon({
-      html: `<div class="slope-arrow-label ${s.steep ? '' : 'moderate'}">${s.label}</div>`,
-      className: '', iconAnchor: [0, 0]
-    }), interactive: false, zIndexOffset: 500
-  }).addTo(slopeGrp);
-});
-slopeGrp.addTo(map);
-
-// ===== Flat routes =====
-const routeGrp = L.layerGroup();
-const flatPaths = [
-  { n:'탄천 자전거길 (평지)', pts:[[37.5145,127.0946],[37.5100,127.0920],[37.5040,127.0870],[37.4970,127.0810],[37.4910,127.0770],[37.4850,127.0730],[37.4780,127.0680],[37.4720,127.0640],[37.4665,127.0610]]},
-  { n:'양재천 자전거길 (평지)', pts:[[37.4842,127.0352],[37.4835,127.0420],[37.4830,127.0490],[37.4828,127.0560],[37.4825,127.0630],[37.4822,127.0700],[37.4820,127.0750]]},
-  { n:'한강 자전거길 (평지)', pts:[[37.5240,127.0100],[37.5250,127.0200],[37.5260,127.0300],[37.5270,127.0400],[37.5265,127.0500],[37.5260,127.0600],[37.5255,127.0700],[37.5250,127.0800],[37.5245,127.0900],[37.5240,127.1000]]},
-  { n:'테헤란로 (비교적 평지)', pts:[[37.4979,127.0276],[37.4990,127.0330],[37.5007,127.0366],[37.5025,127.0420],[37.5045,127.0490],[37.5065,127.0560],[37.5088,127.0639]]},
-];
-flatPaths.forEach(r => {
-  L.polyline(r.pts, { color: '#4CAF50', weight: 4, opacity: 0.65, lineCap: 'round' })
-    .bindPopup(`<b>🟢 ${r.n}</b><br>자전거 타기 좋은 평탄 구간`).addTo(routeGrp);
-  const m = r.pts[Math.floor(r.pts.length/2)];
-  L.marker(m, { icon: L.divIcon({ html:`<div class="flat-badge">🟢 ${r.n}</div>`, className:'', iconAnchor:[0,0]}), interactive:false }).addTo(routeGrp);
+// ===== Map =====
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      'carto': {
+        type: 'raster',
+        tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
+        tileSize: 256,
+        attribution: '© CARTO · © OSM'
+      },
+      'contour': {
+        type: 'raster',
+        tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png','https://b.tile.opentopomap.org/{z}/{x}/{y}.png'],
+        tileSize: 256
+      },
+      'hillshade-tiles': {
+        type: 'raster',
+        tiles: ['https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png'],
+        tileSize: 256
+      },
+      'terrain-dem': {
+        type: 'raster-dem',
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        encoding: 'terrarium'
+      }
+    },
+    layers: [
+      { id: 'base', type: 'raster', source: 'carto' },
+      { id: 'contour-overlay', type: 'raster', source: 'contour', paint: { 'raster-opacity': 0.55 } },
+      { id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.4 } }
+    ],
+    terrain: { source: 'terrain-dem', exaggeration: 2.0 }
+  },
+  center: DEFAULT_LOC,
+  zoom: 14,
+  pitch: 40,
+  bearing: 0,
+  maxPitch: 70,
+  touchPitch: true,
+  dragRotate: true,
+  touchZoomRotate: true
 });
 
-const cautionAreas = [
-  { n:'대모산·구룡산', c:[37.476,127.073], r:600, steep:true },
-  { n:'매봉산', c:[37.489,127.040], r:350, steep:false },
-  { n:'우면산', c:[37.478,127.010], r:450, steep:true },
-  { n:'세곡동 구릉', c:[37.468,127.070], r:400, steep:false },
-];
-cautionAreas.forEach(z => {
-  const col = z.steep ? '#f44336' : '#FF9800';
-  L.circle(z.c, { radius:z.r, color:col, fillColor:col, fillOpacity:0.08, weight:1.5, dashArray:'5,4' })
-    .bindPopup(`<b>${z.steep?'🔴':'🟠'} ${z.n}</b><br>${z.steep?'급경사 — 자전거 회피 권장':'오르막 주의'}`).addTo(routeGrp);
-  L.marker(z.c, { icon: L.divIcon({ html:`<div class="flat-badge ${z.steep?'caution-badge':'moderate-badge'}">${z.steep?'🔴':'🟠'} ${z.n}</div>`, className:'', iconAnchor:[0,0]}), interactive:false }).addTo(routeGrp);
-});
-routeGrp.addTo(map);
+// Nav controls
+map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-left');
 
-// ===== Stations =====
-const stnGrp = L.layerGroup();
-[
-  {n:'강남',la:37.4979,lo:127.0276,c:'s2'},{n:'역삼',la:37.5007,lo:127.0366,c:'s2'},
-  {n:'선릉',la:37.5045,lo:127.0490,c:'s2'},{n:'삼성',la:37.5088,lo:127.0639,c:'s2'},
-  {n:'종합운동장',la:37.5107,lo:127.0736,c:'s2'},{n:'교대',la:37.4934,lo:127.0146,c:'s2'},
-  {n:'압구정',la:37.5270,lo:127.0286,c:'s3'},{n:'신사',la:37.5164,lo:127.0203,c:'s3'},
-  {n:'매봉',la:37.4874,lo:127.0347,c:'s3'},{n:'도곡',la:37.4915,lo:127.0455,c:'s3'},
-  {n:'대치',la:37.4948,lo:127.0577,c:'s3'},{n:'학여울',la:37.4965,lo:127.0648,c:'s3'},
-  {n:'대청',la:37.4920,lo:127.0744,c:'s3'},{n:'일원',la:37.4836,lo:127.0867,c:'s3'},
-  {n:'수서',la:37.4872,lo:127.1017,c:'s3'},
-  {n:'강남구청',la:37.5173,lo:127.0413,c:'s7'},{n:'청담',la:37.5196,lo:127.0539,c:'s7'},
-  {n:'논현',la:37.5113,lo:127.0215,c:'s7'},{n:'학동',la:37.5146,lo:127.0319,c:'s7'},
-  {n:'봉은사',la:37.5140,lo:127.0580,c:'s9'},{n:'언주',la:37.5072,lo:127.0340,c:'s9'},
-  {n:'신논현',la:37.5045,lo:127.0253,c:'s9'},{n:'선정릉',la:37.5104,lo:127.0448,c:'s9'},
-  {n:'양재',la:37.4842,lo:127.0352,c:'ss'},
-  {n:'한티',la:37.4984,lo:127.0561,c:'sb'},{n:'구룡',la:37.4847,lo:127.0538,c:'sb'},
-  {n:'개포동',la:37.4787,lo:127.0549,c:'sb'},{n:'대모산입구',la:37.4765,lo:127.0772,c:'sb'},
-].forEach(s => {
-  L.marker([s.la,s.lo], { icon: L.divIcon({ html:`<div class="stn ${s.c}">${s.n}</div>`, className:'', iconAnchor:[0,-2]}), interactive:false }).addTo(stnGrp);
-});
-stnGrp.addTo(map);
+// Show pitch hint on first load
+setTimeout(() => {
+  const h = document.getElementById('pitchHint');
+  h.classList.add('show');
+  setTimeout(() => h.classList.remove('show'), 4000);
+}, 2000);
 
-// ===== Peaks =====
-const peakGrp = L.layerGroup();
-[
-  {n:'대모산 293m',la:37.4730,lo:127.0830},{n:'구룡산 306m',la:37.4785,lo:127.0620},
-  {n:'매봉산 101m',la:37.4910,lo:127.0450},{n:'우면산 293m',la:37.4780,lo:127.0080},
-].forEach(h => {
-  L.marker([h.la,h.lo], { icon: L.divIcon({ html:`<div class="peak-label">⛰️ ${h.n}</div>`, className:'', iconAnchor:[0,8]}), interactive:false }).addTo(peakGrp);
-});
-peakGrp.addTo(map);
+// ===== GeoJSON sources for overlays =====
+map.on('load', () => {
+  // --- Flat routes ---
+  const flatRoutes = [
+    { name: '탄천 자전거길', coords: [[127.0946,37.5145],[127.0920,37.5100],[127.0870,37.5040],[127.0810,37.4970],[127.0770,37.4910],[127.0730,37.4850],[127.0680,37.4780],[127.0640,37.4720],[127.0610,37.4665]] },
+    { name: '양재천 자전거길', coords: [[127.0352,37.4842],[127.0420,37.4835],[127.0490,37.4830],[127.0560,37.4828],[127.0630,37.4825],[127.0700,37.4822],[127.0750,37.4820]] },
+    { name: '한강 자전거길', coords: [[127.0100,37.5240],[127.0200,37.5250],[127.0300,37.5260],[127.0400,37.5270],[127.0500,37.5265],[127.0600,37.5260],[127.0700,37.5255],[127.0800,37.5250],[127.0900,37.5245],[127.1000,37.5240]] },
+    { name: '테헤란로', coords: [[127.0276,37.4979],[127.0330,37.4990],[127.0366,37.5007],[127.0420,37.5025],[127.0490,37.5045],[127.0560,37.5065],[127.0639,37.5088]] },
+  ];
+  const routeFeatures = flatRoutes.map(r => ({
+    type: 'Feature', properties: { name: r.name },
+    geometry: { type: 'LineString', coordinates: r.coords }
+  }));
 
-// ===== Layer controls =====
-const bases = { clean: cleanBase, satellite: satBase };
-let curBase = 'clean';
-document.querySelectorAll('input[name="base"]').forEach(r => {
-  r.addEventListener('change', e => { map.removeLayer(bases[curBase]); curBase=e.target.value; map.addLayer(bases[curBase]); });
-});
-document.getElementById('chkHill').addEventListener('change', e => e.target.checked ? map.addLayer(hillOverlay) : map.removeLayer(hillOverlay));
-document.getElementById('chkStation').addEventListener('change', e => e.target.checked ? map.addLayer(stnGrp) : map.removeLayer(stnGrp));
-document.getElementById('chkPeak').addEventListener('change', e => e.target.checked ? map.addLayer(peakGrp) : map.removeLayer(peakGrp));
-document.getElementById('chkRoute').addEventListener('change', e => e.target.checked ? map.addLayer(routeGrp) : map.removeLayer(routeGrp));
-document.getElementById('chkSlope').addEventListener('change', e => e.target.checked ? map.addLayer(slopeGrp) : map.removeLayer(slopeGrp));
-document.getElementById('btnLayers').addEventListener('click', () => document.getElementById('layerPanel').classList.toggle('show'));
-document.getElementById('btnReset').addEventListener('click', () => map.fitBounds(BOUNDS, { padding:[10,60] }));
-
-// ===== My location =====
-let locM=null, locC=null, locWatch=null;
-
-function showMyLocation(la, lo, ac) {
-  if(locM){map.removeLayer(locM);map.removeLayer(locC);}
-  locM = L.marker([la,lo],{
-    icon:L.divIcon({html:'<div class="my-dot"></div>',className:'',iconSize:[18,18],iconAnchor:[9,9]}),
-    zIndexOffset:9999
-  }).addTo(map);
-  locC = L.circle([la,lo],{radius:Math.min(ac,300),color:'#4285F4',fillColor:'#4285F4',fillOpacity:0.12,weight:1.5}).addTo(map);
-  fetchE(la,lo).then(e => {
-    const txt = e!==null ? `📍 현위치 고도: <b>${e}m</b>` : '📍 현위치';
-    locM.bindPopup(txt).openPopup();
+  map.addSource('flat-routes', { type: 'geojson', data: { type: 'FeatureCollection', features: routeFeatures } });
+  map.addLayer({ id: 'flat-routes-line', type: 'line', source: 'flat-routes',
+    paint: { 'line-color': '#4CAF50', 'line-width': 5, 'line-opacity': 0.7 },
+    layout: { 'line-cap': 'round', 'line-join': 'round' }
   });
+  map.addLayer({ id: 'flat-routes-label', type: 'symbol', source: 'flat-routes',
+    layout: { 'symbol-placement': 'line-center', 'text-field': ['concat', '🟢 ', ['get', 'name']],
+      'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-allow-overlap': true
+    },
+    paint: { 'text-color': '#1B5E20', 'text-halo-color': '#fff', 'text-halo-width': 2 }
+  });
+
+  // --- Caution zones ---
+  const cautionZones = [
+    { name: '대모산·구룡산', center: [127.073,37.476], radius: 600, steep: true },
+    { name: '매봉산', center: [127.040,37.489], radius: 350, steep: false },
+    { name: '우면산', center: [127.010,37.478], radius: 450, steep: true },
+    { name: '세곡동 구릉', center: [127.070,37.468], radius: 400, steep: false },
+  ];
+  // Approximate circles as polygons
+  function makeCircle(c, r, n=32) {
+    const coords = [];
+    for (let i=0;i<=n;i++) {
+      const a = (i/n)*2*Math.PI;
+      const dlat = (r/111320)*Math.cos(a);
+      const dlng = (r/(111320*Math.cos(c[1]*Math.PI/180)))*Math.sin(a);
+      coords.push([c[0]+dlng, c[1]+dlat]);
+    }
+    return coords;
+  }
+  const cautionFeatures = cautionZones.map(z => ({
+    type: 'Feature',
+    properties: { name: z.name, steep: z.steep },
+    geometry: { type: 'Polygon', coordinates: [makeCircle(z.center, z.radius)] }
+  }));
+  map.addSource('caution-zones', { type: 'geojson', data: { type: 'FeatureCollection', features: cautionFeatures } });
+  map.addLayer({ id: 'caution-fill', type: 'fill', source: 'caution-zones',
+    paint: { 'fill-color': ['case', ['get','steep'], '#f44336', '#FF9800'], 'fill-opacity': 0.12 }
+  });
+  map.addLayer({ id: 'caution-border', type: 'line', source: 'caution-zones',
+    paint: { 'line-color': ['case', ['get','steep'], '#f44336', '#FF9800'], 'line-width': 2, 'line-dasharray': [4,3] }
+  });
+  map.addLayer({ id: 'caution-label', type: 'symbol', source: 'caution-zones',
+    layout: { 'text-field': ['concat', ['case',['get','steep'],'🔴','🟠'], ' ', ['get','name']],
+      'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold']
+    },
+    paint: { 'text-color': ['case',['get','steep'],'#C62828','#E65100'], 'text-halo-color': '#fff', 'text-halo-width': 2 }
+  });
+
+  // --- Stations ---
+  const stations = [
+    {n:'강남',la:37.4979,lo:127.0276,c:'#1a6b24',l:'2'},
+    {n:'역삼',la:37.5007,lo:127.0366,c:'#1a6b24',l:'2'},
+    {n:'선릉',la:37.5045,lo:127.0490,c:'#1a6b24',l:'2'},
+    {n:'삼성',la:37.5088,lo:127.0639,c:'#1a6b24',l:'2'},
+    {n:'종합운동장',la:37.5107,lo:127.0736,c:'#1a6b24',l:'2'},
+    {n:'교대',la:37.4934,lo:127.0146,c:'#1a6b24',l:'2'},
+    {n:'압구정',la:37.5270,lo:127.0286,c:'#c43d08',l:'3'},
+    {n:'신사',la:37.5164,lo:127.0203,c:'#c43d08',l:'3'},
+    {n:'매봉',la:37.4874,lo:127.0347,c:'#c43d08',l:'3'},
+    {n:'도곡',la:37.4915,lo:127.0455,c:'#c43d08',l:'3'},
+    {n:'대치',la:37.4948,lo:127.0577,c:'#c43d08',l:'3'},
+    {n:'학여울',la:37.4965,lo:127.0648,c:'#c43d08',l:'3'},
+    {n:'대청',la:37.4920,lo:127.0744,c:'#c43d08',l:'3'},
+    {n:'일원',la:37.4836,lo:127.0867,c:'#c43d08',l:'3'},
+    {n:'수서',la:37.4872,lo:127.1017,c:'#c43d08',l:'3'},
+    {n:'강남구청',la:37.5173,lo:127.0413,c:'#3d5516',l:'7'},
+    {n:'청담',la:37.5196,lo:127.0539,c:'#3d5516',l:'7'},
+    {n:'논현',la:37.5113,lo:127.0215,c:'#3d5516',l:'7'},
+    {n:'학동',la:37.5146,lo:127.0319,c:'#3d5516',l:'7'},
+    {n:'봉은사',la:37.5140,lo:127.0580,c:'#6b5c38',l:'9'},
+    {n:'언주',la:37.5072,lo:127.0340,c:'#6b5c38',l:'9'},
+    {n:'신논현',la:37.5045,lo:127.0253,c:'#6b5c38',l:'9'},
+    {n:'선정릉',la:37.5104,lo:127.0448,c:'#6b5c38',l:'9'},
+    {n:'양재',la:37.4842,lo:127.0352,c:'#a01528',l:'신분당'},
+    {n:'한티',la:37.4984,lo:127.0561,c:'#9a7510',l:'분당'},
+    {n:'구룡',la:37.4847,lo:127.0538,c:'#9a7510',l:'분당'},
+    {n:'개포동',la:37.4787,lo:127.0549,c:'#9a7510',l:'분당'},
+    {n:'대모산입구',la:37.4765,lo:127.0772,c:'#9a7510',l:'분당'},
+  ];
+  const stnFeatures = stations.map(s => ({
+    type: 'Feature',
+    properties: { name: s.n, color: s.c, line: s.l },
+    geometry: { type: 'Point', coordinates: [s.lo, s.la] }
+  }));
+  map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: stnFeatures } });
+  // Station circle
+  map.addLayer({ id: 'station-circle', type: 'circle', source: 'stations',
+    paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': ['get','color'], 'circle-stroke-width': 2.5 }
+  });
+  // Station label
+  map.addLayer({ id: 'station-label', type: 'symbol', source: 'stations',
+    layout: {
+      'text-field': ['get','name'],
+      'text-size': 13, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-offset': [0, 1.2], 'text-anchor': 'top',
+      'text-allow-overlap': false, 'text-optional': true
+    },
+    paint: {
+      'text-color': ['get','color'],
+      'text-halo-color': '#ffffff', 'text-halo-width': 2.5
+    }
+  });
+
+  // --- Slope arrows ---
+  const slopes = [
+    {la:37.4790,lo:127.0780,dir:'↗',label:'+80m',steep:true},
+    {la:37.4760,lo:127.0850,dir:'→',label:'+60m',steep:true},
+    {la:37.4810,lo:127.0870,dir:'↘',label:'+50m',steep:true},
+    {la:37.4820,lo:127.0580,dir:'↓',label:'+70m',steep:true},
+    {la:37.4760,lo:127.0650,dir:'↗',label:'+90m',steep:true},
+    {la:37.4880,lo:127.0400,dir:'↑',label:'+30m',steep:false},
+    {la:37.4930,lo:127.0420,dir:'↗',label:'+25m',steep:false},
+    {la:37.4890,lo:127.0480,dir:'←',label:'+20m',steep:false},
+    {la:37.4810,lo:127.0120,dir:'↑',label:'+60m',steep:true},
+    {la:37.4750,lo:127.0050,dir:'↗',label:'+80m',steep:true},
+    {la:37.4700,lo:127.0660,dir:'↓',label:'+35m',steep:false},
+    {la:37.4660,lo:127.0730,dir:'↗',label:'+40m',steep:false},
+    {la:37.4850,lo:127.0920,dir:'←',label:'+25m',steep:false},
+    {la:37.4800,lo:127.0560,dir:'↓',label:'+45m',steep:false},
+  ];
+  const slopeFeatures = slopes.map(s => ({
+    type: 'Feature',
+    properties: { dir: s.dir, label: s.label, steep: s.steep },
+    geometry: { type: 'Point', coordinates: [s.lo, s.la] }
+  }));
+  map.addSource('slopes', { type: 'geojson', data: { type: 'FeatureCollection', features: slopeFeatures } });
+  map.addLayer({ id: 'slope-arrow', type: 'symbol', source: 'slopes',
+    layout: {
+      'text-field': ['concat', ['get','dir'], ' ', ['get','label']],
+      'text-size': 14, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-allow-overlap': true
+    },
+    paint: {
+      'text-color': ['case', ['get','steep'], '#C62828', '#E65100'],
+      'text-halo-color': '#fff', 'text-halo-width': 2
+    }
+  });
+
+  // --- Peaks ---
+  const peaks = [
+    {n:'⛰️ 대모산 293m',la:37.4730,lo:127.0830},
+    {n:'⛰️ 구룡산 306m',la:37.4785,lo:127.0620},
+    {n:'⛰️ 매봉산 101m',la:37.4910,lo:127.0450},
+    {n:'⛰️ 우면산 293m',la:37.4780,lo:127.0080},
+  ];
+  map.addSource('peaks', { type: 'geojson', data: {
+    type: 'FeatureCollection',
+    features: peaks.map(p => ({ type:'Feature', properties:{name:p.n}, geometry:{type:'Point',coordinates:[p.lo,p.la]} }))
+  }});
+  map.addLayer({ id: 'peak-label', type: 'symbol', source: 'peaks',
+    layout: { 'text-field': ['get','name'], 'text-size': 12, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'], 'text-allow-overlap': true },
+    paint: { 'text-color': '#C62828', 'text-halo-color': '#fff', 'text-halo-width': 2 }
+  });
+
+  // --- Default location marker ---
+  addLocMarker(DEFAULT_LOC);
+});
+
+// ===== Location marker =====
+let locMarkerEl = null;
+let locMarker = null;
+
+function addLocMarker(lnglat) {
+  if (locMarker) locMarker.remove();
+  locMarkerEl = document.createElement('div');
+  locMarkerEl.innerHTML = '<div style="width:18px;height:18px;background:#4285F4;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 0 rgba(66,133,244,0.5),0 1px 4px rgba(0,0,0,0.3);animation:pulse 2s infinite"></div>';
+  locMarker = new maplibregl.Marker({ element: locMarkerEl }).setLngLat(lnglat).addTo(map);
 }
 
-document.getElementById('btnLocate').addEventListener('click', () => {
-  if (!navigator.geolocation) return alert('이 브라우저에서 위치를 지원하지 않아요.\nHTTPS가 필요합니다.');
-  const b = document.getElementById('btnLocate');
-  b.textContent='⏳'; b.style.opacity='0.6';
+// Inject pulse keyframes
+const styleSheet = document.createElement('style');
+styleSheet.textContent = '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(66,133,244,0.5),0 1px 4px rgba(0,0,0,0.3)}70%{box-shadow:0 0 0 18px rgba(66,133,244,0),0 1px 4px rgba(0,0,0,0.3)}100%{box-shadow:0 0 0 0 rgba(66,133,244,0),0 1px 4px rgba(0,0,0,0.3)}}';
+document.head.appendChild(styleSheet);
 
-  // If already have location, just pan to it
-  if (locM) {
-    const ll = locM.getLatLng();
-    map.setView(ll, 15);
-    locM.openPopup();
-    b.textContent='📍'; b.style.opacity='1';
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(p => {
-    const {latitude:la,longitude:lo,accuracy:ac}=p.coords;
-    showMyLocation(la, lo, ac);
-    map.setView([la,lo],15);
-    b.textContent='📍'; b.style.opacity='1';
-
-    // Keep watching position
-    if (!locWatch) {
-      locWatch = navigator.geolocation.watchPosition(wp => {
-        const {latitude:wla,longitude:wlo,accuracy:wac}=wp.coords;
-        showMyLocation(wla, wlo, wac);
-      }, ()=>{}, {enableHighAccuracy:true});
-    }
-  }, err => {
-    b.textContent='📍'; b.style.opacity='1';
-    if (err.code === 1) alert('위치 권한이 거부되었어요.\n브라우저 설정에서 위치 권한을 허용해주세요.');
-    else if (err.code === 2) alert('위치를 가져올 수 없어요.\nGPS 또는 네트워크를 확인해주세요.');
-    else alert('위치 조회 시간 초과. 다시 시도해주세요.');
-  }, {enableHighAccuracy:true, timeout:15000, maximumAge:30000});
+// ===== Controls =====
+document.getElementById('btnLayers').addEventListener('click', () => document.getElementById('layerPanel').classList.toggle('show'));
+document.getElementById('btnReset').addEventListener('click', () => {
+  map.flyTo({ center: GANGNAM_CENTER, zoom: 14, pitch: 40, bearing: 0, duration: 1000 });
 });
 
-// Default location: 선정릉역
-const DEFAULT_LOC = { lat: 37.5104, lng: 127.0448 };
-showMyLocation(DEFAULT_LOC.lat, DEFAULT_LOC.lng, 50);
-map.setView([DEFAULT_LOC.lat, DEFAULT_LOC.lng], 15);
+let is3d = true;
+document.getElementById('btn3dToggle').addEventListener('click', () => {
+  is3d = !is3d;
+  if (is3d) {
+    map.setTerrain({ source: 'terrain-dem', exaggeration: 2.0 });
+    map.easeTo({ pitch: 40, duration: 500 });
+    document.getElementById('btn3dToggle').textContent = '🏔️';
+  } else {
+    map.setTerrain(null);
+    map.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+    document.getElementById('btn3dToggle').textContent = '2D';
+  }
+});
 
-// Auto-locate on mobile (overrides default if successful)
+document.getElementById('chk3d').addEventListener('change', e => {
+  if (e.target.checked) {
+    map.setTerrain({ source: 'terrain-dem', exaggeration: 2.0 });
+  } else {
+    map.setTerrain(null);
+    map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
+  }
+});
+
+document.getElementById('contourOpacity').addEventListener('input', e => {
+  map.setPaintProperty('contour-overlay', 'raster-opacity', e.target.value / 100);
+});
+
+document.getElementById('chkStation').addEventListener('change', e => {
+  const v = e.target.checked ? 'visible' : 'none';
+  map.setLayoutProperty('station-circle', 'visibility', v);
+  map.setLayoutProperty('station-label', 'visibility', v);
+});
+document.getElementById('chkRoute').addEventListener('change', e => {
+  const v = e.target.checked ? 'visible' : 'none';
+  ['flat-routes-line','flat-routes-label','caution-fill','caution-border','caution-label'].forEach(l => map.setLayoutProperty(l,'visibility',v));
+});
+document.getElementById('chkSlope').addEventListener('change', e => {
+  map.setLayoutProperty('slope-arrow', 'visibility', e.target.checked ? 'visible' : 'none');
+});
+
+// ===== My Location =====
+document.getElementById('btnLocate').addEventListener('click', () => {
+  if (!navigator.geolocation) return alert('위치 서비스를 지원하지 않아요.');
+  const b = document.getElementById('btnLocate');
+  b.textContent = '⏳'; b.style.opacity = '0.6';
+  navigator.geolocation.getCurrentPosition(p => {
+    const ll = [p.coords.longitude, p.coords.latitude];
+    addLocMarker(ll);
+    map.flyTo({ center: ll, zoom: 15, duration: 800 });
+    b.textContent = '📍'; b.style.opacity = '1';
+    fetchE(p.coords.latitude, p.coords.longitude).then(el => {
+      if (el !== null) new maplibregl.Popup({ offset: 12 }).setLngLat(ll).setHTML(`📍 현위치 고도: <b>${el}m</b>`).addTo(map);
+    });
+  }, err => {
+    b.textContent = '📍'; b.style.opacity = '1';
+    if (err.code === 1) alert('위치 권한을 허용해주세요.');
+    else alert('위치를 가져올 수 없어요.');
+  }, { enableHighAccuracy: true, timeout: 15000 });
+});
+
+// Auto-locate on mobile
 if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(p => {
-    const {latitude:la,longitude:lo,accuracy:ac}=p.coords;
-    showMyLocation(la, lo, ac);
-  }, ()=>{}, {enableHighAccuracy:false, timeout:8000, maximumAge:60000});
+    addLocMarker([p.coords.longitude, p.coords.latitude]);
+  }, () => {}, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
 }
 
 // ===== Elevation API =====
-async function fetchE(la,lo) {
-  try { const r=await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${la},${lo}`); const d=await r.json(); return d.results[0].elevation; }
-  catch { return null; }
+async function fetchE(la, lo) {
+  try {
+    const r = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${la},${lo}`);
+    const d = await r.json();
+    return d.results[0].elevation;
+  } catch { return null; }
 }
 
-// ===== Mode & Click =====
-let mode='explore', cmpState=0, ptA=null, ptB=null, mkA=null, mkB=null, cmpLine=null, clickMk=null;
+// ===== Click & Mode =====
+let mode = 'explore', cmpState = 0, ptA = null, ptB = null;
+let cmpMarkers = [];
 
 document.querySelectorAll('.mode-tab').forEach(t => {
   t.addEventListener('click', () => {
-    document.querySelectorAll('.mode-tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.mode-tab').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     mode = t.dataset.mode;
     resetCmp();
-    document.getElementById('exploreInfo').style.display = mode==='explore'?'block':'none';
-    document.getElementById('compareInfo').style.display = mode==='compare'?'block':'none';
+    document.getElementById('exploreInfo').style.display = mode === 'explore' ? 'block' : 'none';
+    document.getElementById('compareInfo').style.display = mode === 'compare' ? 'block' : 'none';
   });
 });
 
 function resetCmp() {
-  cmpState=0; ptA=ptB=null;
-  [mkA,mkB,cmpLine].forEach(m=>{if(m)map.removeLayer(m)});
-  mkA=mkB=cmpLine=null;
-  document.getElementById('compareHint').style.display='block';
-  document.getElementById('compareHint').textContent='🅰️ 출발 지점을 탭하세요';
-  document.getElementById('compareResult').style.display='none';
-  document.getElementById('exploreInfo').innerHTML='<div class="hint-text">지도를 탭하면 고도와 경사 판정을 볼 수 있어요</div>';
+  cmpState = 0; ptA = ptB = null;
+  cmpMarkers.forEach(m => m.remove()); cmpMarkers = [];
+  if (map.getSource('cmp-line')) { map.removeLayer('cmp-line-layer'); map.removeSource('cmp-line'); }
+  document.getElementById('compareHint').style.display = 'block';
+  document.getElementById('compareHint').textContent = '🅰️ 출발 지점을 탭하세요';
+  document.getElementById('compareResult').style.display = 'none';
+  document.getElementById('exploreInfo').innerHTML = '<div class="hint-text">지도를 탭하면 고도와 경사 판정을 볼 수 있어요</div>';
 }
 
 function gradeInfo(elev) {
-  if (elev > 80) return { text:'급경사 구간 — 회피 권장 🚫', cls:'badge-danger', color:'#C62828' };
-  if (elev > 40) return { text:'오르막 주의 ⚠️', cls:'badge-warn', color:'#E65100' };
-  return { text:'평지 — 자전거 OK 🚴', cls:'badge-safe', color:'#2E7D32' };
+  if (elev > 80) return { text: '급경사 구간 — 회피 권장 🚫', cls: 'badge-danger', color: '#C62828' };
+  if (elev > 40) return { text: '오르막 주의 ⚠️', cls: 'badge-warn', color: '#E65100' };
+  return { text: '평지 — 자전거 OK 🚴', cls: 'badge-safe', color: '#2E7D32' };
 }
 
-// Arrow decorator for compare line
-function makeArrow(from, to, color) {
-  const dx = to[1]-from[1], dy = to[0]-from[0];
-  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-  const midLat = (from[0]+to[0])/2, midLng = (from[1]+to[1])/2;
-  // Rotated arrow at midpoint
-  return L.marker([midLat, midLng], {
-    icon: L.divIcon({
-      html: `<div style="font-size:24px;transform:rotate(${-angle+90}deg);color:${color};text-shadow:0 0 4px #fff,0 0 4px #fff;">⬆</div>`,
-      className: '', iconSize: [24,24], iconAnchor: [12,12]
-    }), interactive: false
-  });
+function makeDotMarker(lnglat, color) {
+  const el = document.createElement('div');
+  el.style.cssText = `width:14px;height:14px;background:${color};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3)`;
+  const m = new maplibregl.Marker({ element: el }).setLngLat(lnglat).addTo(map);
+  cmpMarkers.push(m);
+  return m;
 }
 
-let cmpArrowMk = null;
+map.on('click', async (e) => {
+  const { lng, lat } = e.lngLat;
 
-map.on('click', async e => {
-  const {lat,lng} = e.latlng;
-
-  if (mode==='explore') {
-    if(clickMk) map.removeLayer(clickMk);
-    clickMk = L.circleMarker([lat,lng],{radius:5,color:'#333',fillColor:'#333',fillOpacity:0.9,weight:2}).addTo(map);
-    document.getElementById('exploreInfo').innerHTML='<div class="hint-text">⏳ 고도 조회 중...</div>';
-    const el = await fetchE(lat,lng);
-    if (el!==null) {
+  if (mode === 'explore') {
+    cmpMarkers.forEach(m => m.remove()); cmpMarkers = [];
+    makeDotMarker([lng, lat], '#333');
+    document.getElementById('exploreInfo').innerHTML = '<div class="hint-text">⏳ 고도 조회 중...</div>';
+    const el = await fetchE(lat, lng);
+    if (el !== null) {
       const g = gradeInfo(el);
-      document.getElementById('exploreInfo').innerHTML=`
+      document.getElementById('exploreInfo').innerHTML = `
         <div class="elev-info">
           <div class="elev-big" style="color:${g.color}">${el}<small>m</small></div>
           <div>
@@ -527,57 +560,55 @@ map.on('click', async e => {
           </div>
         </div>`;
     } else {
-      document.getElementById('exploreInfo').innerHTML='<div class="hint-text">⚠️ 조회 실패 — 다시 탭해보세요</div>';
+      document.getElementById('exploreInfo').innerHTML = '<div class="hint-text">⚠️ 조회 실패 — 다시 탭해보세요</div>';
     }
   }
 
-  else if (mode==='compare') {
-    if (cmpState===0) {
-      if(mkA) map.removeLayer(mkA);
-      mkA = L.circleMarker([lat,lng],{radius:7,color:'#4CAF50',fillColor:'#4CAF50',fillOpacity:0.9}).addTo(map);
-      ptA = {lat,lng,e:null};
-      document.getElementById('compareHint').textContent='⏳ 출발 고도 조회 중...';
-      ptA.e = await fetchE(lat,lng);
-      if (ptA.e!==null) { document.getElementById('compareHint').textContent=`🅰️ ${ptA.e}m — 이제 🅱️ 도착을 탭하세요`; cmpState=1; }
-      else document.getElementById('compareHint').textContent='⚠️ 실패, 다시 탭';
+  else if (mode === 'compare') {
+    if (cmpState === 0) {
+      makeDotMarker([lng, lat], '#4CAF50');
+      ptA = { lat, lng, e: null };
+      document.getElementById('compareHint').textContent = '⏳ 출발 고도 조회 중...';
+      ptA.e = await fetchE(lat, lng);
+      if (ptA.e !== null) {
+        document.getElementById('compareHint').textContent = `🅰️ ${ptA.e}m — 이제 🅱️ 도착을 탭하세요`;
+        cmpState = 1;
+      } else document.getElementById('compareHint').textContent = '⚠️ 실패, 다시 탭';
     }
-    else if (cmpState===1) {
-      if(mkB) map.removeLayer(mkB);
-      if(cmpLine) map.removeLayer(cmpLine);
-      if(cmpArrowMk) map.removeLayer(cmpArrowMk);
-      mkB = L.circleMarker([lat,lng],{radius:7,color:'#2196F3',fillColor:'#2196F3',fillOpacity:0.9}).addTo(map);
-      cmpLine = L.polyline([[ptA.lat,ptA.lng],[lat,lng]],{color:'#555',weight:2,dashArray:'5,5',opacity:0.5}).addTo(map);
-      ptB = {lat,lng,e:null};
-      document.getElementById('compareHint').textContent='⏳ 도착 고도 조회 중...';
-      ptB.e = await fetchE(lat,lng);
-      if (ptB.e!==null) {
-        document.getElementById('compareHint').style.display='none';
-        document.getElementById('compareResult').style.display='block';
-        document.getElementById('elevA').textContent=ptA.e+'m';
-        document.getElementById('elevB').textContent=ptB.e+'m';
-        const d = ptB.e - ptA.e, ad = Math.abs(d);
-        let arr,col,vd;
-        if (d>10) { arr='📈'; col='#C62828'; vd=ad>30?'오르막 심함! 🚫 다른 길 추천':'약간 오르막 — 힘들 수 있음'; }
-        else if (d<-10) { arr='📉'; col='#2E7D32'; vd='내리막! 편하게 갈 수 있어요 🎉'; }
-        else { arr='➡️'; col='#2E7D32'; vd='거의 평지! 자전거 OK 🚴'; }
-        document.getElementById('diffArrow').textContent=arr;
-        document.getElementById('diffText').style.color=col;
-        document.getElementById('diffText').textContent=`${d>0?'+':''}${d}m`;
-        document.getElementById('diffVerdict').textContent=vd;
-
-        // Direction arrow on the line (points from A to B, colored by slope)
-        const arrowCol = d > 10 ? '#C62828' : d < -10 ? '#2E7D32' : '#888';
-        cmpArrowMk = makeArrow([ptA.lat,ptA.lng],[lat,lng], arrowCol);
-        cmpArrowMk.addTo(map);
-
-        cmpState=2;
-      } else { document.getElementById('compareHint').textContent='⚠️ 실패, 다시 탭'; document.getElementById('compareHint').style.display='block'; }
+    else if (cmpState === 1) {
+      makeDotMarker([lng, lat], '#2196F3');
+      // Draw line
+      if (map.getSource('cmp-line')) { map.removeLayer('cmp-line-layer'); map.removeSource('cmp-line'); }
+      map.addSource('cmp-line', { type: 'geojson', data: {
+        type: 'Feature', geometry: { type: 'LineString', coordinates: [[ptA.lng,ptA.lat],[lng,lat]] }
+      }});
+      map.addLayer({ id: 'cmp-line-layer', type: 'line', source: 'cmp-line',
+        paint: { 'line-color': '#555', 'line-width': 2, 'line-dasharray': [4,3] }
+      });
+      ptB = { lat, lng, e: null };
+      document.getElementById('compareHint').textContent = '⏳ 도착 고도 조회 중...';
+      ptB.e = await fetchE(lat, lng);
+      if (ptB.e !== null) {
+        document.getElementById('compareHint').style.display = 'none';
+        document.getElementById('compareResult').style.display = 'block';
+        document.getElementById('elevA').textContent = ptA.e + 'm';
+        document.getElementById('elevB').textContent = ptB.e + 'm';
+        const d = ptB.e - ptA.e;
+        let arr, col, vd;
+        if (d > 10) { arr = '📈'; col = '#C62828'; vd = Math.abs(d) > 30 ? '오르막 심함! 🚫 다른 길 추천' : '약간 오르막 — 힘들 수 있음'; }
+        else if (d < -10) { arr = '📉'; col = '#2E7D32'; vd = '내리막! 편하게 갈 수 있어요 🎉'; }
+        else { arr = '➡️'; col = '#2E7D32'; vd = '거의 평지! 자전거 OK 🚴'; }
+        document.getElementById('diffArrow').textContent = arr;
+        document.getElementById('diffText').style.color = col;
+        document.getElementById('diffText').textContent = `${d > 0 ? '+' : ''}${d}m`;
+        document.getElementById('diffVerdict').textContent = vd;
+        cmpState = 2;
+      } else {
+        document.getElementById('compareHint').textContent = '⚠️ 실패, 다시 탭';
+        document.getElementById('compareHint').style.display = 'block';
+      }
     }
-    else if (cmpState===2) {
-      if(cmpArrowMk) map.removeLayer(cmpArrowMk);
-      resetCmp();
-      map.fire('click',e);
-    }
+    else if (cmpState === 2) { resetCmp(); }
   }
 });
 </script>

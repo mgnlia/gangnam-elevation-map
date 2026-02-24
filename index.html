@@ -1101,6 +1101,14 @@ async function enterMc() {
 async function loadDEM() {
   const SIZE = 128;
   const grid = new Float32Array(SIZE * SIZE);
+
+  // 현재 지도 중심 기준으로 타일 좌표 동적 계산 (zoom 13 = ~10km 범위)
+  const Z = 13;
+  const center = map.getCenter();
+  const tileX = Math.floor((center.lng + 180) / 360 * Math.pow(2, Z));
+  const latRad = center.lat * Math.PI / 180;
+  const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, Z));
+
   return new Promise(resolve => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -1119,7 +1127,7 @@ async function loadDEM() {
       resolve(grid);
     };
     img.onerror = () => {
-      // Fallback procedural terrain
+      // Fallback: 절차적 지형 (서울 강남 대략 모사)
       for (let gy = 0; gy < SIZE; gy++)
         for (let gx = 0; gx < SIZE; gx++) {
           const d1 = ((gx - 90) ** 2 + (gy - 100) ** 2), d2 = ((gx - 55) ** 2 + (gy - 65) ** 2);
@@ -1127,7 +1135,7 @@ async function loadDEM() {
         }
       resolve(grid);
     };
-    img.src = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/3494/1574.png';
+    img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${tileX}/${tileY}.png`;
   });
 }
 

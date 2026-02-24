@@ -138,99 +138,134 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
-// ===== Custom contour raster protocol — polyline tracing =====
+// ===== Custom contour raster protocol — optimized =====
 const CONTOUR_INTERVALS = { 10:[100,500], 11:[50,200], 12:[20,100], 13:[20,100], 14:[10,50], 15:[10,50] };
 const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const DEM_MAX_ZOOM = 13;
 const TILE_SIZE = 256;
 const RENDER_SIZE = 512;
 
-// Chaikin's corner-cutting subdivision for smooth curves
-function smoothLine(pts, iterations) {
-  if (pts.length < 3) return pts;
-  let line = pts;
-  for (let iter = 0; iter < iterations; iter++) {
-    const out = [line[0]]; // keep first point
-    for (let i = 0; i < line.length - 1; i++) {
-      const a = line[i], b = line[i+1];
-      out.push([a[0]*0.75 + b[0]*0.25, a[1]*0.75 + b[1]*0.25]);
-      out.push([a[0]*0.25 + b[0]*0.75, a[1]*0.25 + b[1]*0.75]);
+// ---- DEM tile cache (LRU, max 64 tiles) ----
+const _demCache = new Map();
+const _demInflight = new Map();
+const DEM_CACHE_MAX = 64;
+async function fetchDemTile(z, x, y, signal) {
+  const k = `${z}/${x}/${y}`;
+  if (_demCache.has(k)) { const v = _demCache.get(k); _demCache.delete(k); _demCache.set(k,v); return v; }
+  if (_demInflight.has(k)) return _demInflight.get(k);
+  const p = (async () => {
+    const url = DEM_URL.replace('{z}',z).replace('{x}',x).replace('{y}',y);
+    const resp = await fetch(url, { signal });
+    if (!resp.ok) throw new Error(`DEM ${resp.status}`);
+    const bmp = await createImageBitmap(await resp.blob());
+    const c = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close();
+    const rgba = ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
+    // Pre-decode to Float32 elevation (avoids repeated decode per contour tile)
+    const elev = new Float32Array(TILE_SIZE * TILE_SIZE);
+    for (let i = 0; i < TILE_SIZE * TILE_SIZE; i++) {
+      const j = i * 4;
+      elev[i] = rgba[j] * 256 + rgba[j+1] + rgba[j+2] / 256 - 32768;
     }
-    out.push(line[line.length - 1]); // keep last point
-    line = out;
-  }
-  return line;
+    if (_demCache.size >= DEM_CACHE_MAX) { _demCache.delete(_demCache.keys().next().value); }
+    _demCache.set(k, elev);
+    _demInflight.delete(k);
+    return elev;
+  })();
+  _demInflight.set(k, p);
+  return p;
 }
 
-// Gaussian blur on elevation grid (3x3 kernel)
-function blurElevation(elev, w, h) {
-  const out = new Float32Array(w * h);
-  const k = [1/16, 2/16, 1/16, 2/16, 4/16, 2/16, 1/16, 2/16, 1/16];
-  for (let y = 1; y < h-1; y++) {
-    for (let x = 1; x < w-1; x++) {
-      let v = 0;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++)
-          v += elev[(y+dy)*w+(x+dx)] * k[(dy+1)*3+(dx+1)];
-      out[y*w+x] = v;
-    }
+// ---- Chaikin smoothing (1 iteration, flat array) ----
+function smoothLine(pts) {
+  const n = pts.length;
+  if (n < 6) return pts; // < 3 points (x,y pairs)
+  const out = new Float32Array(2 + (n - 2) * 2 + 2);
+  out[0] = pts[0]; out[1] = pts[1];
+  let o = 2;
+  for (let i = 0; i < n - 2; i += 2) {
+    const ax = pts[i], ay = pts[i+1], bx = pts[i+2], by = pts[i+3];
+    out[o++] = ax*0.75 + bx*0.25; out[o++] = ay*0.75 + by*0.25;
+    out[o++] = ax*0.25 + bx*0.75; out[o++] = ay*0.25 + by*0.75;
   }
-  // Copy edges
-  for (let x = 0; x < w; x++) { out[x] = elev[x]; out[(h-1)*w+x] = elev[(h-1)*w+x]; }
-  for (let y = 0; y < h; y++) { out[y*w] = elev[y*w]; out[y*w+w-1] = elev[y*w+w-1]; }
+  out[o++] = pts[n-2]; out[o++] = pts[n-1];
+  return out.subarray(0, o);
+}
+
+// ---- Separable Gaussian blur (σ≈1, kernel [1,2,1]/4) ----
+function blurElevation(src, w, h) {
+  const tmp = new Float32Array(w * h);
+  // Horizontal pass
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    tmp[row] = src[row];
+    for (let x = 1; x < w-1; x++)
+      tmp[row+x] = (src[row+x-1] + src[row+x]*2 + src[row+x+1]) * 0.25;
+    tmp[row+w-1] = src[row+w-1];
+  }
+  // Vertical pass
+  const out = new Float32Array(w * h);
+  for (let x = 0; x < w; x++) out[x] = tmp[x];
+  for (let y = 1; y < h-1; y++)
+    for (let x = 0; x < w; x++)
+      out[y*w+x] = (tmp[(y-1)*w+x] + tmp[y*w+x]*2 + tmp[(y+1)*w+x]) * 0.25;
+  for (let x = 0; x < w; x++) out[(h-1)*w+x] = tmp[(h-1)*w+x];
   return out;
 }
 
-// Chain segments into polylines: O(n) via spatial hash
+// ---- Chain segments into polylines (flat arrays) ----
 function chainSegments(segs) {
-  if (!segs.length) return [];
-  const eps = 0.01;
-  const key = (p) => `${(p[0]/eps|0)},${(p[1]/eps|0)}`;
-  // Build adjacency: endpoint → list of segment indices
+  const n = segs.length;
+  if (!n) return [];
+  // segs: [[x0,y0],[x1,y1]], ... → use integer keys for spatial hash
+  const shift = 7; // ~0.008 precision (1/128)
+  const key = (x,y) => ((x*128|0) << 20) | (y*128|0);
   const adj = new Map();
-  for (let i = 0; i < segs.length; i++) {
-    for (const p of [segs[i][0], segs[i][1]]) {
-      const k = key(p);
-      if (!adj.has(k)) adj.set(k, []);
-      adj.get(k).push(i);
-    }
+  const addAdj = (k, i) => { let a = adj.get(k); if (!a) { a = []; adj.set(k,a); } a.push(i); };
+  for (let i = 0; i < n; i++) {
+    addAdj(key(segs[i][0][0], segs[i][0][1]), i);
+    addAdj(key(segs[i][1][0], segs[i][1][1]), i);
   }
-  const used = new Uint8Array(segs.length);
+  const used = new Uint8Array(n);
   const lines = [];
-  for (let i = 0; i < segs.length; i++) {
+  for (let i = 0; i < n; i++) {
     if (used[i]) continue;
     used[i] = 1;
-    let line = [segs[i][0], segs[i][1]];
-    // Extend forward from line end
+    // Build flat coordinate array
+    const coords = [segs[i][0][0], segs[i][0][1], segs[i][1][0], segs[i][1][1]];
     for (let dir = 1; dir >= 0; dir--) {
       let extended = true;
       while (extended) {
         extended = false;
-        const tip = dir ? line[line.length - 1] : line[0];
-        const k = key(tip);
-        const cands = adj.get(k);
+        const ti = dir ? coords.length - 2 : 0;
+        const tx = coords[ti], ty = coords[ti+1];
+        const cands = adj.get(key(tx, ty));
         if (!cands) break;
         for (const j of cands) {
           if (used[j]) continue;
           const s = segs[j];
-          const d0 = Math.abs(s[0][0]-tip[0])+Math.abs(s[0][1]-tip[1]);
-          const d1 = Math.abs(s[1][0]-tip[0])+Math.abs(s[1][1]-tip[1]);
-          if (d0 < eps) {
+          if (Math.abs(s[0][0]-tx)+Math.abs(s[0][1]-ty) < 0.02) {
             used[j] = 1;
-            dir ? line.push(s[1]) : line.unshift(s[1]);
+            dir ? coords.push(s[1][0], s[1][1]) : coords.unshift(s[0][0], s[0][1]);
             extended = true; break;
-          } else if (d1 < eps) {
+          } else if (Math.abs(s[1][0]-tx)+Math.abs(s[1][1]-ty) < 0.02) {
             used[j] = 1;
-            dir ? line.push(s[0]) : line.unshift(s[0]);
+            dir ? coords.push(s[0][0], s[0][1]) : coords.unshift(s[1][0], s[1][1]);
             extended = true; break;
           }
         }
       }
     }
-    if (line.length >= 2) lines.push(line);
+    if (coords.length >= 6) lines.push(new Float32Array(coords)); // ≥ 3 points
   }
   return lines;
 }
+
+// ---- Reusable canvases ----
+const _renderCanvas = new OffscreenCanvas(RENDER_SIZE, RENDER_SIZE);
+const _finalCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
 
 maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const parts = params.url.replace('contour-raster://', '').split('/');
@@ -244,49 +279,46 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const offY = (y - demY * scale) / scale;
   const span = 1 / scale;
 
-  const demUrl = DEM_URL.replace('{z}', demZ).replace('{x}', demX).replace('{y}', demY);
-  const resp = await fetch(demUrl, { signal: abortController.signal });
-  if (!resp.ok) throw new Error(`DEM ${resp.status}`);
-  const bmp = await createImageBitmap(await resp.blob());
+  // Fetch from cache or network
+  const demElev = await fetchDemTile(demZ, demX, demY, abortController.signal);
 
-  const rc = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  const rctx = rc.getContext('2d');
-  rctx.drawImage(bmp, 0, 0);
-  const fd = rctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
-
-  // Bilinear-interpolated elevation grid
+  // Bilinear-interpolated elevation grid at render resolution
   const gs = RENDER_SIZE + 1;
   const elev = new Float32Array(gs * gs);
-  const dec = (i) => fd[i]*256 + fd[i+1] + fd[i+2]/256 - 32768;
+  const tsInv = 1 / RENDER_SIZE;
+  const spanTs = span * TILE_SIZE;
+  const offXTs = offX * TILE_SIZE;
+  const offYTs = offY * TILE_SIZE;
   for (let py = 0; py < gs; py++) {
+    const fy = offYTs + py * tsInv * spanTs;
+    const iy = Math.min(fy | 0, TILE_SIZE - 2);
+    const dy = fy - iy;
+    const row0 = iy * TILE_SIZE;
+    const row1 = row0 + TILE_SIZE;
     for (let px = 0; px < gs; px++) {
-      const fx = offX*TILE_SIZE + (px/RENDER_SIZE)*span*TILE_SIZE;
-      const fy = offY*TILE_SIZE + (py/RENDER_SIZE)*span*TILE_SIZE;
-      const ix = Math.min(Math.floor(fx), TILE_SIZE-2);
-      const iy = Math.min(Math.floor(fy), TILE_SIZE-2);
-      const dx = fx-ix, dy = fy-iy;
-      const i00 = (iy*TILE_SIZE+ix)*4;
-      elev[py*gs+px] = dec(i00)*(1-dx)*(1-dy) + dec(i00+4)*dx*(1-dy)
-                      + dec(i00+TILE_SIZE*4)*(1-dx)*dy + dec(i00+TILE_SIZE*4+4)*dx*dy;
+      const fx = offXTs + px * tsInv * spanTs;
+      const ix = Math.min(fx | 0, TILE_SIZE - 2);
+      const dx = fx - ix;
+      elev[py*gs+px] = demElev[row0+ix]*(1-dx)*(1-dy) + demElev[row0+ix+1]*dx*(1-dy)
+                      + demElev[row1+ix]*(1-dx)*dy     + demElev[row1+ix+1]*dx*dy;
     }
   }
 
-  // Smooth the elevation grid to reduce DEM noise (2 passes)
-  let smoothElev = blurElevation(elev, gs, gs);
-  smoothElev = blurElevation(smoothElev, gs, gs);
+  // Gaussian blur (separable, 2 passes)
+  let se = blurElevation(elev, gs, gs);
+  se = blurElevation(se, gs, gs);
 
   const intervals = CONTOUR_INTERVALS[Math.min(z,15)] || CONTOUR_INTERVALS[15];
   const minor = intervals[0], major = intervals[1];
 
-  // Marching squares → collect segments per contour type
+  // Marching squares → collect segments
   const minorSegs = [], majorSegs = [];
   for (let py = 0; py < RENDER_SIZE; py++) {
+    const r0 = py * gs, r1 = r0 + gs;
     for (let px = 0; px < RENDER_SIZE; px++) {
-      const e00 = smoothElev[py*gs+px], e10 = smoothElev[py*gs+px+1];
-      const e01 = smoothElev[(py+1)*gs+px], e11 = smoothElev[(py+1)*gs+px+1];
+      const e00 = se[r0+px], e10 = se[r0+px+1], e01 = se[r1+px], e11 = se[r1+px+1];
       if (e00 < 1 && e10 < 1 && e01 < 1 && e11 < 1) continue;
-      const c00=Math.floor(e00/minor), c10=Math.floor(e10/minor);
-      const c01=Math.floor(e01/minor), c11=Math.floor(e11/minor);
+      const c00=e00/minor|0, c10=e10/minor|0, c01=e01/minor|0, c11=e11/minor|0;
       if (c00===c10 && c00===c01 && c00===c11) continue;
       const lo = Math.min(c00,c10,c01,c11), hi = Math.max(c00,c10,c01,c11);
       for (let c = lo+1; c <= hi; c++) {
@@ -304,44 +336,40 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
     }
   }
 
-  // Chain segments → polylines → smooth with Chaikin subdivision
-  const minorLines = chainSegments(minorSegs).map(l => smoothLine(l, 2));
-  const majorLines = chainSegments(majorSegs).map(l => smoothLine(l, 2));
+  // Chain → smooth (flat arrays, 1 Chaikin pass)
+  const minorLines = chainSegments(minorSegs).map(smoothLine);
+  const majorLines = chainSegments(majorSegs).map(smoothLine);
 
-  // Render
-  const out = new OffscreenCanvas(RENDER_SIZE, RENDER_SIZE);
-  const ctx = out.getContext('2d');
+  // Render on reusable canvas
+  const ctx = _renderCanvas.getContext('2d');
   ctx.clearRect(0, 0, RENDER_SIZE, RENDER_SIZE);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // Minor contours — thin, subtle
   ctx.strokeStyle = 'rgba(140, 100, 50, 0.25)';
   ctx.lineWidth = 1.0;
   for (const ln of minorLines) {
-    if (ln.length < 3) continue; // skip very short fragments
     ctx.beginPath();
-    ctx.moveTo(ln[0][0], ln[0][1]);
-    for (let i = 1; i < ln.length; i++) ctx.lineTo(ln[i][0], ln[i][1]);
+    ctx.moveTo(ln[0], ln[1]);
+    for (let i = 2; i < ln.length; i += 2) ctx.lineTo(ln[i], ln[i+1]);
     ctx.stroke();
   }
 
-  // Major contours — clear, elegant
   ctx.strokeStyle = 'rgba(100, 60, 20, 0.5)';
   ctx.lineWidth = 2.0;
   for (const ln of majorLines) {
-    if (ln.length < 3) continue;
     ctx.beginPath();
-    ctx.moveTo(ln[0][0], ln[0][1]);
-    for (let i = 1; i < ln.length; i++) ctx.lineTo(ln[i][0], ln[i][1]);
+    ctx.moveTo(ln[0], ln[1]);
+    for (let i = 2; i < ln.length; i += 2) ctx.lineTo(ln[i], ln[i+1]);
     ctx.stroke();
   }
 
-  // Downscale to 256 for anti-aliasing
-  const fin = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  fin.getContext('2d').drawImage(out, 0, 0, TILE_SIZE, TILE_SIZE);
-  const blob2 = await fin.convertToBlob({ type: 'image/png' });
-  return { data: new Uint8Array(await blob2.arrayBuffer()) };
+  // Downscale to 256
+  const fctx = _finalCanvas.getContext('2d');
+  fctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+  fctx.drawImage(_renderCanvas, 0, 0, TILE_SIZE, TILE_SIZE);
+  const blob = await _finalCanvas.convertToBlob({ type: 'image/png' });
+  return { data: new Uint8Array(await blob.arrayBuffer()) };
 });
 
 // ===== Map (base only — contours added after load) =====

@@ -139,10 +139,11 @@ const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
 // ===== Custom contour raster protocol (no external library) =====
-const CONTOUR_INTERVALS = { 10:[50,250], 11:[20,100], 12:[10,50], 13:[5,20], 14:[5,20], 15:[2,10] };
+const CONTOUR_INTERVALS = { 10:[50,250], 11:[20,100], 12:[10,50], 13:[10,50], 14:[5,20], 15:[5,20] };
 const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const DEM_MAX_ZOOM = 13;
 const TILE_SIZE = 256;
+const RENDER_SIZE = 512; // 2x supersampling for smooth lines
 
 maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const parts = params.url.replace('contour-raster://', '').split('/');
@@ -165,24 +166,31 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const blob = await resp.blob();
   const bmp = await createImageBitmap(blob);
 
-  // Read pixel data (full tile then extract sub-region if overzoomed)
+  // Read full DEM tile pixel data
   const readCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
   const rctx = readCanvas.getContext('2d');
-  rctx.drawImage(bmp, 0, 0, TILE_SIZE, TILE_SIZE);
+  rctx.drawImage(bmp, 0, 0);
   const fullData = rctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
 
-  // Decode terrarium to elevation grid (for the sub-region we need)
-  const gs = TILE_SIZE + 1; // grid size with 1px overlap for edge detection
+  // Decode terrarium → elevation grid at RENDER_SIZE resolution
+  const gs = RENDER_SIZE + 1;
   const elev = new Float32Array(gs * gs);
   for (let py = 0; py < gs; py++) {
     for (let px = 0; px < gs; px++) {
-      // Map output pixel to DEM pixel
-      let sx = Math.floor(offX * TILE_SIZE + (px / TILE_SIZE) * span * TILE_SIZE);
-      let sy = Math.floor(offY * TILE_SIZE + (py / TILE_SIZE) * span * TILE_SIZE);
-      sx = Math.min(sx, TILE_SIZE - 1);
-      sy = Math.min(sy, TILE_SIZE - 1);
-      const i = (sy * TILE_SIZE + sx) * 4;
-      elev[py * gs + px] = fullData[i] * 256 + fullData[i + 1] + fullData[i + 2] / 256 - 32768;
+      // Bilinear sample from DEM
+      const fx = offX * TILE_SIZE + (px / RENDER_SIZE) * span * TILE_SIZE;
+      const fy = offY * TILE_SIZE + (py / RENDER_SIZE) * span * TILE_SIZE;
+      const ix = Math.min(Math.floor(fx), TILE_SIZE - 2);
+      const iy = Math.min(Math.floor(fy), TILE_SIZE - 2);
+      const dx = fx - ix, dy = fy - iy;
+      const decode = (i) => fullData[i] * 256 + fullData[i+1] + fullData[i+2] / 256 - 32768;
+      const i00 = (iy * TILE_SIZE + ix) * 4;
+      const i10 = i00 + 4;
+      const i01 = i00 + TILE_SIZE * 4;
+      const i11 = i01 + 4;
+      // Bilinear interpolation for smooth elevation
+      elev[py * gs + px] = decode(i00) * (1-dx)*(1-dy) + decode(i10) * dx*(1-dy)
+                         + decode(i01) * (1-dx)*dy     + decode(i11) * dx*dy;
     }
   }
 
@@ -190,81 +198,91 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const intervals = CONTOUR_INTERVALS[Math.min(z, 15)] || CONTOUR_INTERVALS[15];
   const minor = intervals[0], major = intervals[1];
 
-  // Draw contour lines on output canvas
-  const out = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  const ctx = out.getContext('2d');
-  ctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+  // Collect all contour line segments grouped by elevation value
+  const minorSegs = [];
+  const majorSegs = [];
 
-  // Marching squares-style contour tracing
-  for (let py = 0; py < TILE_SIZE; py++) {
-    for (let px = 0; px < TILE_SIZE; px++) {
+  for (let py = 0; py < RENDER_SIZE; py++) {
+    for (let px = 0; px < RENDER_SIZE; px++) {
       const e00 = elev[py * gs + px];
       const e10 = elev[py * gs + px + 1];
       const e01 = elev[(py + 1) * gs + px];
       const e11 = elev[(py + 1) * gs + px + 1];
 
-      // Check for contour crossings at minor interval
+      // Skip water/noise (below 1m)
+      if (e00 < 1 && e10 < 1 && e01 < 1 && e11 < 1) continue;
+
       const c00 = Math.floor(e00 / minor);
       const c10 = Math.floor(e10 / minor);
       const c01 = Math.floor(e01 / minor);
       const c11 = Math.floor(e11 / minor);
+      if (c00 === c10 && c00 === c01 && c00 === c11) continue;
 
-      if (c00 === c10 && c00 === c01 && c00 === c11) continue; // no crossing
+      // Process each contour level that crosses this cell
+      const minC = Math.min(c00, c10, c01, c11);
+      const maxC = Math.max(c00, c10, c01, c11);
+      for (let c = minC + 1; c <= maxC; c++) {
+        const crossVal = c * minor;
+        if (crossVal <= 0) continue; // skip sea level
 
-      // Determine which contour value is being crossed
-      const minE = Math.min(e00, e10, e01, e11);
-      const crossVal = (Math.floor(minE / minor) + 1) * minor;
-      const isMajor = crossVal % major === 0;
+        const crossings = [];
+        if ((e00 - crossVal) * (e10 - crossVal) < 0)
+          crossings.push([px + (crossVal - e00) / (e10 - e00), py]);
+        if ((e01 - crossVal) * (e11 - crossVal) < 0)
+          crossings.push([px + (crossVal - e01) / (e11 - e01), py + 1]);
+        if ((e00 - crossVal) * (e01 - crossVal) < 0)
+          crossings.push([px, py + (crossVal - e00) / (e01 - e00)]);
+        if ((e10 - crossVal) * (e11 - crossVal) < 0)
+          crossings.push([px + 1, py + (crossVal - e10) / (e11 - e10)]);
 
-      // Interpolate crossing points on cell edges for line segments
-      const crossings = [];
-      // Top edge (e00 → e10)
-      if ((e00 - crossVal) * (e10 - crossVal) < 0) {
-        const t = (crossVal - e00) / (e10 - e00);
-        crossings.push([px + t, py]);
-      }
-      // Bottom edge (e01 → e11)
-      if ((e01 - crossVal) * (e11 - crossVal) < 0) {
-        const t = (crossVal - e01) / (e11 - e01);
-        crossings.push([px + t, py + 1]);
-      }
-      // Left edge (e00 → e01)
-      if ((e00 - crossVal) * (e01 - crossVal) < 0) {
-        const t = (crossVal - e00) / (e01 - e00);
-        crossings.push([px, py + t]);
-      }
-      // Right edge (e10 → e11)
-      if ((e10 - crossVal) * (e11 - crossVal) < 0) {
-        const t = (crossVal - e10) / (e11 - e10);
-        crossings.push([px + 1, py + t]);
-      }
-
-      // Draw line segments between crossing pairs
-      if (crossings.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(crossings[0][0], crossings[0][1]);
-        ctx.lineTo(crossings[1][0], crossings[1][1]);
-        if (isMajor) {
-          ctx.strokeStyle = 'rgba(80, 40, 0, 0.85)';
-          ctx.lineWidth = 1.8;
-        } else {
-          ctx.strokeStyle = 'rgba(110, 70, 20, 0.55)';
-          ctx.lineWidth = 0.8;
-        }
-        ctx.stroke();
-        // If 4 crossings (saddle point), draw second segment
-        if (crossings.length === 4) {
-          ctx.beginPath();
-          ctx.moveTo(crossings[2][0], crossings[2][1]);
-          ctx.lineTo(crossings[3][0], crossings[3][1]);
-          ctx.stroke();
+        if (crossings.length >= 2) {
+          const seg = [crossings[0], crossings[1]];
+          (crossVal % major === 0 ? majorSegs : minorSegs).push(seg);
+          if (crossings.length === 4) {
+            (crossVal % major === 0 ? majorSegs : minorSegs).push([crossings[2], crossings[3]]);
+          }
         }
       }
     }
   }
 
-  // Return as PNG
-  const outBlob = await out.convertToBlob({ type: 'image/png' });
+  // Render on 512px canvas then scale down to 256 for anti-aliasing
+  const out = new OffscreenCanvas(RENDER_SIZE, RENDER_SIZE);
+  const ctx = out.getContext('2d');
+  ctx.clearRect(0, 0, RENDER_SIZE, RENDER_SIZE);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Draw minor contours (thin, subtle)
+  if (minorSegs.length > 0) {
+    ctx.strokeStyle = 'rgba(120, 80, 30, 0.35)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    for (const s of minorSegs) {
+      ctx.moveTo(s[0][0], s[0][1]);
+      ctx.lineTo(s[1][0], s[1][1]);
+    }
+    ctx.stroke();
+  }
+
+  // Draw major contours (thicker, darker)
+  if (majorSegs.length > 0) {
+    ctx.strokeStyle = 'rgba(90, 50, 10, 0.6)';
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    for (const s of majorSegs) {
+      ctx.moveTo(s[0][0], s[0][1]);
+      ctx.lineTo(s[1][0], s[1][1]);
+    }
+    ctx.stroke();
+  }
+
+  // Scale down to 256 for final tile (anti-aliasing via downscale)
+  const final = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+  const fctx = final.getContext('2d');
+  fctx.drawImage(out, 0, 0, TILE_SIZE, TILE_SIZE);
+
+  const outBlob = await final.convertToBlob({ type: 'image/png' });
   const buffer = await outBlob.arrayBuffer();
   return { data: new Uint8Array(buffer) };
 });

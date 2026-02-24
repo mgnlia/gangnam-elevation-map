@@ -1,4 +1,4 @@
-const CACHE_NAME = 'seoul-elevation-map-v4';
+const CACHE_NAME = 'seoul-elevation-map-v5';
 const APP_SHELL = [
   '/',
   '/index.html',

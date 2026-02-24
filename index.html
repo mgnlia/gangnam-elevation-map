@@ -217,7 +217,7 @@ map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: t
 const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const controlHintText = isMobile
   ? '🤏 두 손가락 회전 / 기울이기'
-  : '🖱️ 우클릭 드래그: 회전 &nbsp;|&nbsp; 휠버튼 드래그: 회전·기울기';
+  : '⌨️ WASD: 이동 &nbsp;|&nbsp; 우클릭: 회전 &nbsp;|&nbsp; 휠버튼: 회전·기울기';
 
 document.getElementById('pitchHint').innerHTML = controlHintText;
 const legendHint = document.getElementById('legendControlHint');
@@ -1284,6 +1284,42 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
   // Prevent middle-click auto-scroll cursor on some browsers
   document.getElementById('map').addEventListener('auxclick', e => {
     if (e.button === 1) e.preventDefault();
+  });
+
+  // ===== WASD 지도 이동 (데스크탑 전용) =====
+  const wasdKeys = {};
+  let wasdRaf = null;
+  const PAN_SPEED = 6; // px/frame
+
+  function wasdLoop() {
+    if (mcActive || !Object.values(wasdKeys).some(Boolean)) {
+      wasdRaf = null;
+      return;
+    }
+    wasdRaf = requestAnimationFrame(wasdLoop);
+    let dx = 0, dy = 0;
+    if (wasdKeys['w']) dy -= PAN_SPEED;
+    if (wasdKeys['s']) dy += PAN_SPEED;
+    if (wasdKeys['a']) dx -= PAN_SPEED;
+    if (wasdKeys['d']) dx += PAN_SPEED;
+    // 대각선 이동 시 속도 정규화
+    if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+    map.panBy([dx, dy], { animate: false });
+  }
+
+  document.addEventListener('keydown', e => {
+    if (mcActive) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const key = e.key.toLowerCase();
+    if (['w','a','s','d'].includes(key)) {
+      e.preventDefault();
+      wasdKeys[key] = true;
+      if (!wasdRaf) wasdLoop();
+    }
+  });
+
+  document.addEventListener('keyup', e => {
+    wasdKeys[e.key.toLowerCase()] = false;
   });
 }
 

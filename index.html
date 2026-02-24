@@ -52,23 +52,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 
 /* FPS mode removed */
 
-/* Floating station markers */
-.floating-station{
-  display:flex;flex-direction:column;align-items:center;pointer-events:none;
-}
-.stn-pole{
-  width:2px;height:35px;
-  background:linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.1));
-}
-.stn-tag{
-  background:rgba(255,255,255,0.88);
-  backdrop-filter:blur(4px);
-  border:2px solid;border-radius:6px;
-  padding:2px 8px;font-size:12px;font-weight:700;
-  white-space:nowrap;
-  box-shadow:0 2px 6px rgba(0,0,0,0.15);
-  pointer-events:auto;
-}
 
 .fab-col{
   position:absolute;right:10px;z-index:10;
@@ -239,47 +222,30 @@ setTimeout(() => {
 
 // ===== GeoJSON sources for overlays =====
 map.on('load', () => {
-  // --- Elevation color tint (DEM → colored raster overlay) ---
-  maplibregl.addProtocol('elevcolor', (params, cb) => {
-    const url = params.url.replace('elevcolor://', '');
-    fetch(url).then(r => r.arrayBuffer()).then(buf => {
-      const img = new Image();
-      img.onload = () => {
-        const cv = document.createElement('canvas');
-        cv.width = img.width; cv.height = img.height;
-        const ctx = cv.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const px = ctx.getImageData(0, 0, cv.width, cv.height);
-        const d = px.data;
-        for (let i = 0; i < d.length; i += 4) {
-          const elev = (d[i] * 256 + d[i+1] + d[i+2] / 256) - 32768;
-          // Color ramp: 0-20m green, 20-60m yellow-green, 60-120m orange, 120+ red
-          let r, g, b;
-          if (elev < 20) { r=200; g=230; b=180; }       // 연한 연두
-          else if (elev < 40) { r=210; g=225; b=155; }   // 연두-노랑
-          else if (elev < 70) { r=230; g=215; b=140; }   // 연한 노랑
-          else if (elev < 120) { r=240; g=195; b=130; }  // 연한 주황
-          else if (elev < 200) { r=240; g=170; b=130; }  // 주황
-          else { r=235; g=150; b=130; }                   // 연한 빨강
-          d[i] = r; d[i+1] = g; d[i+2] = b; d[i+3] = 55; // 낮은 투명도
-        }
-        ctx.putImageData(px, 0, 0);
-        cv.toBlob(blob => cb(null, { data: blob }, null, null), 'image/png');
-      };
-      img.src = URL.createObjectURL(new Blob([buf]));
-    }).catch(e => cb(e));
-    return { cancel: () => {} };
-  });
-
+  // --- Elevation color tint (GPU raster-color — terrarium decode on shader) ---
+  // raster-color-mix: [R*65280, G*255, B*1, -32768] → R*256 + G + B/255 - 32768 ≈ elevation(m)
   map.addSource('elev-color', {
     type: 'raster',
-    tiles: ['elevcolor://https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+    tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
     tileSize: 256,
     maxzoom: 13
   });
   map.addLayer({
     id: 'elev-color-layer', type: 'raster', source: 'elev-color',
-    paint: { 'raster-opacity': 0.4 }
+    paint: {
+      'raster-color-mix': [65280, 255, 1, -32768],
+      'raster-color-range': [-10, 350],
+      'raster-color': [
+        'interpolate', ['linear'], ['raster-value'],
+        -10, 'rgba(200, 230, 180, 0)',   // 해수면 이하 - 투명
+          0, 'rgba(200, 230, 180, 0.45)', // 0m  연한 연두
+         20, 'rgba(210, 225, 155, 0.45)', // 20m 연두-노랑
+         40, 'rgba(230, 215, 140, 0.45)', // 40m 연한 노랑
+         70, 'rgba(240, 195, 130, 0.45)', // 70m 연한 주황
+        120, 'rgba(240, 170, 130, 0.45)', // 120m 주황
+        200, 'rgba(235, 150, 130, 0.45)'  // 200m+ 연한 빨강
+      ]
+    }
   });
 
   // --- Contour lines from DEM ---
@@ -479,29 +445,33 @@ map.on('load', () => {
     geometry: { type: 'Point', coordinates: [s.lo, s.la] }
   }));
   map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: stnFeatures } });
-  // Station labels as floating HTML markers (above terrain)
-  const stnMarkers = [];
-  stations.forEach(s => {
-    const el = document.createElement('div');
-    el.className = 'floating-station';
-    el.innerHTML = `<div class="stn-pole"></div><div class="stn-tag" style="color:${s.c};border-color:${s.c}">${s.n}</div>`;
-    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
-      .setLngLat([s.lo, s.la])
-      .addTo(map);
-    stnMarkers.push(marker);
+  // Station markers as GPU symbol layers (no DOM, minzoom handles visibility natively)
+  map.addLayer({
+    id: 'station-dot', type: 'circle', source: 'stations', minzoom: 13,
+    paint: {
+      'circle-radius': 4,
+      'circle-color': ['get', 'color'],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 1.5
+    }
   });
-  // Save for toggle + zoom-based visibility
-  window._stnMarkers = stnMarkers;
-  window._stnVisible = true;
-
-  // Hide station HTML markers when zoomed out (big perf win — 28 DOM repositions per frame)
-  function updateStnZoomVis() {
-    if (!window._stnVisible) return; // user toggled off
-    const show = map.getZoom() >= 13;
-    stnMarkers.forEach(m => m.getElement().style.display = show ? '' : 'none');
-  }
-  map.on('zoom', updateStnZoomVis);
-  updateStnZoomVis();
+  map.addLayer({
+    id: 'station-labels', type: 'symbol', source: 'stations', minzoom: 13,
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-size': 12,
+      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-offset': [0, -1.2],
+      'text-anchor': 'bottom',
+      'text-allow-overlap': false,
+      'text-padding': 2
+    },
+    paint: {
+      'text-color': ['get', 'color'],
+      'text-halo-color': 'rgba(255,255,255,0.95)',
+      'text-halo-width': 3
+    }
+  });
 
   // --- Slope arrows ---
   const slopes = [
@@ -810,11 +780,9 @@ document.getElementById('chkContourFill')?.addEventListener('change', e => {
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {
-  window._stnVisible = e.target.checked;
-  if (window._stnMarkers) {
-    const show = e.target.checked && map.getZoom() >= 13;
-    window._stnMarkers.forEach(m => m.getElement().style.display = show ? '' : 'none');
-  }
+  const v = e.target.checked ? 'visible' : 'none';
+  try { map.setLayoutProperty('station-dot', 'visibility', v); } catch(err) {}
+  try { map.setLayoutProperty('station-labels', 'visibility', v); } catch(err) {}
 });
 document.getElementById('chkRoute').addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';

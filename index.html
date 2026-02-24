@@ -94,12 +94,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <input type="range" id="contourOpacity" min="0" max="100" value="75">
   <hr>
   <label><input type="checkbox" id="chk3d" checked> 🏔️ 3D 지형</label>
-  <label><input type="checkbox" id="chkElevColor" checked> 🎨 고도 색칠</label>
   <label><input type="checkbox" id="chkContour" checked> 〰️ 등고선</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
   <label><input type="checkbox" id="chkSlope" checked> 🔺 오르막 방향</label>
-  <label><input type="checkbox" id="chkContourFill" checked> 🎨 등고선 사이 색칠</label>
 </div>
 
 <div class="legend-bar" id="legendBar">
@@ -117,7 +115,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
     <span style="margin-right:4px;color:#C62828">›››</span> 급경사 오르막
   </div>
   <div class="lg-row"><span style="font-size:9px;margin-right:4px">〰️</span> 등고선</div>
-  <div class="lg-row"><div class="lg-c" style="background:linear-gradient(to right,#c8e6b4,#edd78c,#f0aa82)"></div>고도 색칠</div>
   <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px;color:#666" id="legendControlHint">
     🤏 두 손가락 회전/기울이기
   </div>
@@ -555,7 +552,7 @@ map.on('load', () => {
     id: 'station-labels', type: 'symbol', source: 'stations', minzoom: 13,
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 12,
+      'text-size': 15,
       'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
       'text-offset': [0, -1.2],
       'text-anchor': 'bottom',
@@ -849,11 +846,6 @@ document.getElementById('chk3d').addEventListener('change', e => {
   }
 });
 
-// Elevation color toggle
-document.getElementById('chkElevColor')?.addEventListener('change', e => {
-  try { map.setLayoutProperty('elev-color-layer', 'visibility', e.target.checked ? 'visible' : 'none'); } catch(err) {}
-});
-
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
@@ -867,12 +859,6 @@ document.getElementById('contourOpacity').addEventListener('input', e => {
     map.setPaintProperty('contour-lines-major', 'line-opacity', v);
     map.setPaintProperty('contour-labels', 'text-opacity', v);
   } catch(err) {}
-});
-
-// Contour fill bands toggle
-document.getElementById('chkContourFill')?.addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  try { map.setLayoutProperty('elevation-color-overlay', 'visibility', v); } catch(err) {}
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {

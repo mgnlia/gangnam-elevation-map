@@ -139,7 +139,7 @@ const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
 // ===== Custom contour raster protocol — v3 optimized =====
-const CONTOUR_INTERVALS = { 10:[100,500], 11:[50,200], 12:[20,100], 13:[20,100], 14:[10,50], 15:[10,50] };
+const CONTOUR_INTERVALS = { 10:[50,200], 11:[50,200], 12:[20,100], 13:[10,50], 14:[10,50], 15:[5,20] };
 const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const DEM_MAX_ZOOM = 13;
 const TILE_SIZE = 256;
@@ -307,15 +307,14 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
 
   // ---- Early exit: flat tile (elevation range < minor interval) ----
   // Quick check using DEM tile min/max (conservative, may include area outside this tile)
-  if (dem.max - dem.min < minor && dem.min > 0) {
+  if (dem.max - dem.min < minor * 0.5 && dem.min > 0) {
     const empty = await emptyTile();
     _tileCache.set(tileKey, empty);
     if (_tileCache.size > TILE_CACHE_MAX) _tileCache.delete(_tileCache.keys().next().value);
     return { data: empty };
   }
 
-  // ---- Adaptive render size: z10-12 → 256, z13+ → 512 ----
-  const RS = z <= 12 ? TILE_SIZE : 512;
+  const RS = 512;
   const gs = RS + 1;
   const { rc, fc } = getCanvas(RS);
 
@@ -386,8 +385,8 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
 
   // Batch all minor lines in one path
   if (minorLines.length) {
-    ctx.strokeStyle = 'rgba(140, 100, 50, 0.25)';
-    ctx.lineWidth = RS > 256 ? 1.0 : 0.7;
+    ctx.strokeStyle = 'rgba(56, 142, 60, 0.5)';
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     for (const ln of minorLines) {
       ctx.moveTo(ln[0], ln[1]);
@@ -398,8 +397,8 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
 
   // Batch all major lines in one path
   if (majorLines.length) {
-    ctx.strokeStyle = 'rgba(100, 60, 20, 0.5)';
-    ctx.lineWidth = RS > 256 ? 2.0 : 1.4;
+    ctx.strokeStyle = 'rgba(46, 125, 50, 0.8)';
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
     for (const ln of majorLines) {
       ctx.moveTo(ln[0], ln[1]);
@@ -416,7 +415,7 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
     fctx.drawImage(rc, 0, 0, TILE_SIZE, TILE_SIZE);
     outCanvas = fc;
   }
-  const blob = await outCanvas.convertToBlob({ type: 'image/webp', quality: 0.8 });
+  const blob = await outCanvas.convertToBlob({ type: 'image/png' });
   const result = new Uint8Array(await blob.arrayBuffer());
 
   // Cache rendered tile

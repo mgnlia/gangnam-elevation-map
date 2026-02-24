@@ -1254,6 +1254,42 @@ function addSigns(grid) {
 document.addEventListener('keydown', e => { mcKeys[e.key.toLowerCase()] = true; if (e.key === 'Escape' && mcActive) exitMc(); });
 document.addEventListener('keyup', e => { mcKeys[e.key.toLowerCase()] = false; });
 
+// ===== Middle mouse button panning (desktop only) =====
+if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+  let midDragging = false, midLastX = 0, midLastY = 0;
+
+  document.getElementById('map').addEventListener('mousedown', e => {
+    if (e.button === 1) {
+      e.preventDefault(); // prevent browser auto-scroll
+      midDragging = true;
+      midLastX = e.clientX;
+      midLastY = e.clientY;
+      document.getElementById('map').style.cursor = 'move';
+    }
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!midDragging) return;
+    const dx = e.clientX - midLastX;
+    const dy = e.clientY - midLastY;
+    map.panBy([-dx, -dy], { animate: false });
+    midLastX = e.clientX;
+    midLastY = e.clientY;
+  });
+
+  document.addEventListener('mouseup', e => {
+    if (e.button === 1) {
+      midDragging = false;
+      document.getElementById('map').style.cursor = '';
+    }
+  });
+
+  // Prevent middle-click from opening auto-scroll cursor on some browsers
+  document.getElementById('map').addEventListener('auxclick', e => {
+    if (e.button === 1) e.preventDefault();
+  });
+}
+
 // Register Service Worker for offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

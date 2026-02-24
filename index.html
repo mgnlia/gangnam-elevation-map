@@ -139,6 +139,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
+// ===== Register contour protocol BEFORE map creation =====
+const _demSource = new mlcontour.DemSource({
+  url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  encoding: 'terrarium',
+  maxzoom: 13,
+  worker: true
+});
+_demSource.setupMaplibre(maplibregl);
 
 // ===== Map (base only — contours added after load) =====
 const map = new maplibregl.Map({
@@ -240,19 +248,11 @@ map.on('load', () => {
     }
   }); } catch(e) { console.warn('elev-color-layer skipped:', e.message); }
 
-  // --- Contour lines (maplibre-contour vector) ---
+  // --- Contour lines (maplibre-contour vector, protocol registered before map) ---
   try {
-    const demSource = new mlcontour.DemSource({
-      url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-      encoding: 'terrarium',
-      maxzoom: 13,
-      worker: true
-    });
-    demSource.setupMaplibre(maplibregl);
-
     map.addSource('contour-source', {
       type: 'vector',
-      tiles: [demSource.contourProtocolUrl({
+      tiles: [_demSource.contourProtocolUrl({
         multiplier: 1,
         overzoom: 1,
         thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },

@@ -94,6 +94,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <input type="range" id="contourOpacity" min="0" max="100" value="75">
   <hr>
   <label><input type="checkbox" id="chk3d" checked> 🏔️ 3D 지형</label>
+  <label><input type="checkbox" id="chkBuildings"> 🏢 3D 건물</label>
   <label><input type="checkbox" id="chkContour" checked> 〰️ 등고선</label>
   <label><input type="checkbox" id="chkStation" checked> 🚇 역</label>
   <label><input type="checkbox" id="chkRoute" checked> 🟢 추천경로</label>
@@ -235,6 +236,48 @@ map.on('load', () => {
       ]
     }
   }); } catch(e) { console.warn('elev-color-layer skipped:', e.message); }
+
+  // --- 3D Buildings (Apple Maps-like tone) ---
+  // OpenFreeMap building layer exposes render_height / render_min_height.
+  map.addSource('openfreemap-v', {
+    type: 'vector',
+    url: 'https://tiles.openfreemap.org/planet'
+  });
+  map.addLayer({
+    id: 'buildings-3d',
+    type: 'fill-extrusion',
+    source: 'openfreemap-v',
+    'source-layer': 'building',
+    minzoom: 13.5,
+    filter: ['!=', ['coalesce', ['get', 'hide_3d'], false], true],
+    layout: { 'visibility': 'none' },
+    paint: {
+      'fill-extrusion-color': [
+        'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0],
+        0, '#dfe6ef',
+        30, '#d3dde8',
+        80, '#c3d0de',
+        180, '#aebfd0'
+      ],
+      'fill-extrusion-height': ['min', ['max', ['*', ['coalesce', ['get', 'render_height'], 0], 1.15], 8], 220],
+      'fill-extrusion-base': ['*', ['coalesce', ['get', 'render_min_height'], 0], 1.15],
+      'fill-extrusion-opacity': 0.98,
+      'fill-extrusion-vertical-gradient': true
+    }
+  });
+  map.addLayer({
+    id: 'buildings-3d-outline',
+    type: 'line',
+    source: 'openfreemap-v',
+    'source-layer': 'building',
+    minzoom: 14,
+    filter: ['!=', ['coalesce', ['get', 'hide_3d'], false], true],
+    layout: { 'visibility': 'none' },
+    paint: {
+      'line-color': 'rgba(120,138,160,0.55)',
+      'line-width': 1.1
+    }
+  });
 
   // --- Contour lines (maplibre-contour vector) ---
   try {
@@ -663,22 +706,63 @@ map.on('load', () => {
     layout: { 'line-cap': 'round' }
   });
 
-  // Arrows along road (pointing uphill)
+  // Arrows along road (pointing uphill) - split by grade for stable symbol-spacing
   map.addLayer({
-    id: 'road-slope-arrows', type: 'symbol', source: 'road-slopes', minzoom: 13,
+    id: 'road-slope-arrows-g1', type: 'symbol', source: 'road-slopes', minzoom: 13,
+    filter: ['==', ['get', 'grade'], 1],
     layout: {
       'symbol-placement': 'line',
-      'text-field': ['get', 'arrows'],
-      'text-size': ['match', ['get','grade'], 1,16, 2,20, 24],
+      'text-field': '›',
+      'text-size': 16,
       'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
       'text-keep-upright': false,
-      'symbol-spacing': ['match', ['get','grade'], 1,80, 2,60, 45],
+      'symbol-spacing': 80,
       'text-allow-overlap': false,
       'text-rotation-alignment': 'map',
       'text-pitch-alignment': 'map'
     },
     paint: {
-      'text-color': ['match', ['get','grade'], 1,'#388E3C', 2,'#E65100', '#C62828'],
+      'text-color': '#388E3C',
+      'text-halo-color': 'rgba(255,255,255,0.85)',
+      'text-halo-width': 1.5
+    }
+  });
+  map.addLayer({
+    id: 'road-slope-arrows-g2', type: 'symbol', source: 'road-slopes', minzoom: 13,
+    filter: ['==', ['get', 'grade'], 2],
+    layout: {
+      'symbol-placement': 'line',
+      'text-field': '››',
+      'text-size': 20,
+      'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-keep-upright': false,
+      'symbol-spacing': 60,
+      'text-allow-overlap': false,
+      'text-rotation-alignment': 'map',
+      'text-pitch-alignment': 'map'
+    },
+    paint: {
+      'text-color': '#E65100',
+      'text-halo-color': 'rgba(255,255,255,0.85)',
+      'text-halo-width': 1.5
+    }
+  });
+  map.addLayer({
+    id: 'road-slope-arrows-g3', type: 'symbol', source: 'road-slopes', minzoom: 13,
+    filter: ['==', ['get', 'grade'], 3],
+    layout: {
+      'symbol-placement': 'line',
+      'text-field': '›››',
+      'text-size': 24,
+      'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-keep-upright': false,
+      'symbol-spacing': 45,
+      'text-allow-overlap': false,
+      'text-rotation-alignment': 'map',
+      'text-pitch-alignment': 'map'
+    },
+    paint: {
+      'text-color': '#C62828',
       'text-halo-color': 'rgba(255,255,255,0.85)',
       'text-halo-width': 1.5
     }
@@ -846,6 +930,12 @@ document.getElementById('chk3d').addEventListener('change', e => {
   }
 });
 
+// 3D buildings toggle (default hidden)
+document.getElementById('chkBuildings')?.addEventListener('change', e => {
+  const v = e.target.checked ? 'visible' : 'none';
+  try { ['buildings-3d', 'buildings-3d-outline'].forEach(l => map.setLayoutProperty(l, 'visibility', v)); } catch(err) {}
+});
+
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
@@ -872,7 +962,7 @@ document.getElementById('chkRoute').addEventListener('change', e => {
 });
 document.getElementById('chkSlope').addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
-  try { ['slope-arrow','road-slope-line','road-slope-arrows','road-slope-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err){}
+  try { ['slope-arrow','road-slope-line','road-slope-arrows-g1','road-slope-arrows-g2','road-slope-arrows-g3','road-slope-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err){}
 });
 
 // ===== My Location =====

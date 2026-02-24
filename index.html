@@ -178,20 +178,10 @@ const map = new maplibregl.Map({
         tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
         tileSize: 256,
         encoding: 'terrarium'
-      },
-      'opentopomap': {
-        type: 'raster',
-        tiles: ['https://tile.opentopomap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenTopoMap (CC-BY-SA)'
       }
     },
     layers: [
-      { id: 'base', type: 'raster', source: 'carto' },
-      { id: 'contour-topo', type: 'raster', source: 'opentopomap', 
-        paint: { 'raster-opacity': 0.45 },
-        layout: { 'visibility': 'visible' }
-      }
+      { id: 'base', type: 'raster', source: 'carto' }
     ],
     terrain: { source: 'terrain-dem', exaggeration: 4.0 }
   },
@@ -329,11 +319,11 @@ map.on('load', () => {
     }, 'contour-lines');
     */
 
-    // Set initial contour-topo opacity from slider value
+    // Set initial contour opacity from slider value
     const initOpacity = parseInt(document.getElementById('contourOpacity').value) / 100;
-    try {
-      map.setPaintProperty('contour-topo', 'raster-opacity', initOpacity * 0.6); // max 60%
-    } catch(e) {}
+    map.setPaintProperty('contour-lines', 'line-opacity', initOpacity);
+    map.setPaintProperty('contour-lines-major', 'line-opacity', initOpacity);
+    map.setPaintProperty('contour-labels', 'text-opacity', initOpacity);
 
     // Hypsometric tint - elevation coloring using hillshade with accent colors
     // Yellow(low) -> Red(high) elevation visualization
@@ -933,13 +923,15 @@ document.getElementById('chkElevColor')?.addEventListener('change', e => {
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
-  try { map.setLayoutProperty('contour-topo','visibility',v); } catch(err) {}
+  try { ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err) {}
 });
 
 document.getElementById('contourOpacity').addEventListener('input', e => {
   const v = e.target.value / 100;
   try {
-    map.setPaintProperty('contour-topo', 'raster-opacity', v * 0.6); // max 60% opacity
+    map.setPaintProperty('contour-lines', 'line-opacity', v);
+    map.setPaintProperty('contour-lines-major', 'line-opacity', v);
+    map.setPaintProperty('contour-labels', 'text-opacity', v);
   } catch(err) {}
 });
 

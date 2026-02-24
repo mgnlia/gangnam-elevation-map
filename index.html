@@ -1255,7 +1255,8 @@ function addSigns(grid) {
 document.addEventListener('keydown', e => { mcKeys[e.key.toLowerCase()] = true; if (e.key === 'Escape' && mcActive) exitMc(); });
 document.addEventListener('keyup', e => { mcKeys[e.key.toLowerCase()] = false; });
 
-// ===== Middle mouse button panning (desktop only) =====
+// ===== Middle mouse button: rotate + tilt (desktop only) =====
+// 좌우 드래그 → 회전(bearing), 상하 드래그 → 기울기(pitch)
 if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
   let midDragging = false, midLastX = 0, midLastY = 0;
 
@@ -1265,7 +1266,7 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
       midDragging = true;
       midLastX = e.clientX;
       midLastY = e.clientY;
-      document.getElementById('map').style.cursor = 'move';
+      document.getElementById('map').style.cursor = 'crosshair';
     }
   });
 
@@ -1273,7 +1274,9 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
     if (!midDragging) return;
     const dx = e.clientX - midLastX;
     const dy = e.clientY - midLastY;
-    map.panBy([-dx, -dy], { animate: false });
+    const newBearing = map.getBearing() + dx * 0.4;
+    const newPitch   = Math.max(0, Math.min(70, map.getPitch() - dy * 0.3));
+    map.jumpTo({ bearing: newBearing, pitch: newPitch });
     midLastX = e.clientX;
     midLastY = e.clientY;
   });
@@ -1285,7 +1288,7 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
     }
   });
 
-  // Prevent middle-click from opening auto-scroll cursor on some browsers
+  // Prevent middle-click auto-scroll cursor on some browsers
   document.getElementById('map').addEventListener('auxclick', e => {
     if (e.button === 1) e.preventDefault();
   });

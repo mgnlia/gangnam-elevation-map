@@ -72,7 +72,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 .pitch-hint{
   position:absolute;bottom:130px;left:50%;transform:translateX(-50%);z-index:10;
   background:rgba(0,0,0,0.7);color:#fff;border-radius:20px;
-  padding:6px 14px;font-size:12px;pointer-events:none;
+  padding:6px 14px;font-size:12px;pointer-events:none;white-space:nowrap;
   opacity:0;transition:opacity .5s;
 }
 .pitch-hint.show{opacity:1}
@@ -118,7 +118,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   </div>
   <div class="lg-row"><span style="font-size:9px;margin-right:4px">〰️</span> 등고선</div>
   <div class="lg-row"><div class="lg-c" style="background:linear-gradient(to right,#c8e6b4,#edd78c,#f0aa82)"></div>고도 색칠</div>
-  <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px;color:#666">
+  <div class="lg-row" style="margin-top:3px;border-top:1px solid #eee;padding-top:3px;color:#666" id="legendControlHint">
     🤏 두 손가락 회전/기울이기
   </div>
 </div>
@@ -132,7 +132,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
   <button class="fab" id="btnMinecraft" title="마인크래프트 모드" style="background:#5D8A3C;color:#fff;font-size:13px;font-weight:800">MC</button>
 </div>
 
-<div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 & 기울이기</div>
+<div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 &amp; 기울이기</div>
 
 <!-- Minecraft mode -->
 <div id="mcOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:#87CEEB">
@@ -212,6 +212,16 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
 
 // Nav controls
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-left');
+
+// 기기별 조작법 힌트 텍스트 설정
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const controlHintText = isMobile
+  ? '🤏 두 손가락 회전 / 기울이기'
+  : '🖱️ 우클릭 드래그: 회전 &nbsp;|&nbsp; 휠버튼 드래그: 회전·기울기';
+
+document.getElementById('pitchHint').innerHTML = controlHintText;
+const legendHint = document.getElementById('legendControlHint');
+if (legendHint) legendHint.innerHTML = controlHintText;
 
 // Show pitch hint on first load
 setTimeout(() => {

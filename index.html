@@ -246,15 +246,18 @@ map.on('load', () => {
     paint: {
       'raster-color-mix': [65280, 255, 1, -32768],
       'raster-color-range': [-10, 350],
+      // raster-value는 0~1 정규화값: (고도 - (-10)) / (350 - (-10))
+      // 0m → 0.028 / 30m → 0.111 / 60m → 0.194 / 100m → 0.306 / 150m → 0.444 / 250m → 0.722
       'raster-color': [
         'interpolate', ['linear'], ['raster-value'],
-        -10, 'rgba(200, 230, 180, 0)',   // 해수면 이하 - 투명
-          0, 'rgba(200, 230, 180, 0.45)', // 0m  연한 연두
-         20, 'rgba(210, 225, 155, 0.45)', // 20m 연두-노랑
-         40, 'rgba(230, 215, 140, 0.45)', // 40m 연한 노랑
-         70, 'rgba(240, 195, 130, 0.45)', // 70m 연한 주황
-        120, 'rgba(240, 170, 130, 0.45)', // 120m 주황
-        200, 'rgba(235, 150, 130, 0.45)'  // 200m+ 연한 빨강
+        0.000, 'rgba(180, 220, 160, 0)',   // -10m 이하 - 투명
+        0.028, 'rgba(180, 220, 160, 0.52)', // 0m   연한 초록
+        0.111, 'rgba(215, 228, 140, 0.52)', // 30m  연두-노랑
+        0.194, 'rgba(238, 220, 115, 0.54)', // 60m  연한 노랑
+        0.306, 'rgba(248, 200, 105, 0.56)', // 100m 연한 주황
+        0.444, 'rgba(248, 172,  95, 0.58)', // 150m 주황
+        0.722, 'rgba(238, 140,  95, 0.60)', // 250m 진한 주황
+        1.000, 'rgba(220, 110,  90, 0.62)'  // 350m 연한 빨강
       ]
     }
   });
@@ -1246,8 +1249,17 @@ function addSigns(grid) {
   });
 }
 
-document.addEventListener('keydown', e => { mcKeys[e.key.toLowerCase()] = true; if (e.key === 'Escape' && mcActive) exitMc(); });
-document.addEventListener('keyup', e => { mcKeys[e.key.toLowerCase()] = false; });
+// e.code 기반으로 WASD/기타 키 처리 (한국어 IME 무관)
+const MC_CODE_MAP = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', KeyQ:'q', KeyE:'e', Space:' ', ShiftLeft:'shift', ShiftRight:'shift' };
+document.addEventListener('keydown', e => {
+  const k = MC_CODE_MAP[e.code] ?? e.key.toLowerCase();
+  mcKeys[k] = true;
+  if (e.key === 'Escape' && mcActive) exitMc();
+});
+document.addEventListener('keyup', e => {
+  const k = MC_CODE_MAP[e.code] ?? e.key.toLowerCase();
+  mcKeys[k] = false;
+});
 
 // ===== Middle mouse button: rotate + tilt (desktop only) =====
 // 좌우 드래그 → 회전(bearing), 상하 드래그 → 기울기(pitch)
@@ -1308,11 +1320,14 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
     map.panBy([dx, dy], { animate: false });
   }
 
+  // e.code = 물리 키 위치 (한국어 IME 활성화 상태에도 불변)
+  const CODE_TO_WASD = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d' };
+
   document.addEventListener('keydown', e => {
     if (mcActive) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const key = e.key.toLowerCase();
-    if (['w','a','s','d'].includes(key)) {
+    const key = CODE_TO_WASD[e.code];
+    if (key) {
       e.preventDefault();
       wasdKeys[key] = true;
       if (!wasdRaf) wasdLoop();
@@ -1320,7 +1335,8 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
   });
 
   document.addEventListener('keyup', e => {
-    wasdKeys[e.key.toLowerCase()] = false;
+    const key = CODE_TO_WASD[e.code];
+    if (key) wasdKeys[key] = false;
   });
 }
 

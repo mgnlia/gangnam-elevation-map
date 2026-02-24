@@ -134,298 +134,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 &amp; 기울이기</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
 <script>
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
-// ===== Custom contour raster protocol — v3 optimized =====
-const CONTOUR_INTERVALS = { 10:[50,200], 11:[50,200], 12:[20,100], 13:[10,50], 14:[10,50], 15:[5,20] };
-const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-const DEM_MAX_ZOOM = 13;
-const TILE_SIZE = 256;
-
-// ---- DEM tile cache (LRU, max 96) + pre-decoded Float32 + min/max ----
-const _demCache = new Map();
-const _demInflight = new Map();
-async function fetchDemTile(z, x, y, signal) {
-  const k = (z << 24) | (x << 12) | y; // int key
-  if (_demCache.has(k)) { const v = _demCache.get(k); _demCache.delete(k); _demCache.set(k,v); return v; }
-  if (_demInflight.has(k)) return _demInflight.get(k);
-  const p = (async () => {
-    const resp = await fetch(DEM_URL.replace('{z}',z).replace('{x}',x).replace('{y}',y), { signal });
-    if (!resp.ok) throw new Error(`DEM ${resp.status}`);
-    const bmp = await createImageBitmap(await resp.blob());
-    const c = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-    c.getContext('2d').drawImage(bmp, 0, 0);
-    bmp.close();
-    const rgba = c.getContext('2d').getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
-    const n = TILE_SIZE * TILE_SIZE;
-    const elev = new Float32Array(n);
-    let emin = 1e9, emax = -1e9;
-    for (let i = 0; i < n; i++) {
-      const j = i << 2;
-      const e = rgba[j] * 256 + rgba[j+1] + rgba[j+2] / 256 - 32768;
-      elev[i] = e;
-      if (e < emin) emin = e; if (e > emax) emax = e;
-    }
-    const tile = { elev, min: emin, max: emax };
-    if (_demCache.size >= 96) _demCache.delete(_demCache.keys().next().value);
-    _demCache.set(k, tile);
-    _demInflight.delete(k);
-    return tile;
-  })();
-  _demInflight.set(k, p);
-  return p;
-}
-
-// ---- Rendered tile cache (LRU, max 128) ----
-const _tileCache = new Map();
-const TILE_CACHE_MAX = 128;
-
-// ---- Chaikin smoothing (2 passes, flat Float32) ----
-function smoothLine1(pts) {
-  const n = pts.length;
-  if (n < 6) return pts;
-  const out = new Float32Array(2 + (n - 2) * 2 + 2);
-  out[0] = pts[0]; out[1] = pts[1];
-  let o = 2;
-  for (let i = 0; i < n - 2; i += 2) {
-    const ax = pts[i], ay = pts[i+1], bx = pts[i+2], by = pts[i+3];
-    out[o++] = ax*0.75 + bx*0.25; out[o++] = ay*0.75 + by*0.25;
-    out[o++] = ax*0.25 + bx*0.75; out[o++] = ay*0.25 + by*0.75;
-  }
-  out[o++] = pts[n-2]; out[o++] = pts[n-1];
-  return out.subarray(0, o);
-}
-function smoothLine(pts) { return smoothLine1(smoothLine1(pts)); }
-
-// ---- Separable blur (in-place capable) ----
-function blurElevation(src, w, h) {
-  const tmp = new Float32Array(w * h);
-  for (let y = 0; y < h; y++) {
-    const r = y * w;
-    tmp[r] = src[r]; tmp[r+w-1] = src[r+w-1];
-    for (let x = 1; x < w-1; x++)
-      tmp[r+x] = (src[r+x-1] + src[r+x]*2 + src[r+x+1]) * 0.25;
-  }
-  const out = new Float32Array(w * h);
-  for (let x = 0; x < w; x++) { out[x] = tmp[x]; out[(h-1)*w+x] = tmp[(h-1)*w+x]; }
-  for (let y = 1; y < h-1; y++)
-    for (let x = 0; x < w; x++)
-      out[y*w+x] = (tmp[(y-1)*w+x] + tmp[y*w+x]*2 + tmp[(y+1)*w+x]) * 0.25;
-  return out;
-}
-
-// ---- Chain segments → polylines (int-key spatial hash) ----
-function chainSegments(segs) {
-  const n = segs.length;
-  if (!n) return [];
-  // Round to nearest 1/64 for spatial hash — marching squares produce exact cell-edge coords
-  const key = (x,y) => ((x*64+0.5|0) << 20) | (y*64+0.5|0);
-  const adj = new Map();
-  for (let i = 0; i < n; i++) {
-    const s = segs[i];
-    let k = key(s[0], s[1]);
-    let a = adj.get(k); if (!a) { a = []; adj.set(k,a); } a.push(i);
-    k = key(s[2], s[3]);
-    a = adj.get(k); if (!a) { a = []; adj.set(k,a); } a.push(i);
-  }
-  const used = new Uint8Array(n);
-  const lines = [];
-  for (let i = 0; i < n; i++) {
-    if (used[i]) continue;
-    used[i] = 1;
-    const coords = [segs[i][0], segs[i][1], segs[i][2], segs[i][3]];
-    for (let dir = 1; dir >= 0; dir--) {
-      for (;;) {
-        const ti = dir ? coords.length - 2 : 0;
-        const tx = coords[ti], ty = coords[ti+1];
-        const cands = adj.get(key(tx, ty));
-        if (!cands) break;
-        let found = false;
-        for (const j of cands) {
-          if (used[j]) continue;
-          const s = segs[j];
-          if (Math.abs(s[0]-tx)+Math.abs(s[1]-ty) < 0.05) {
-            used[j] = 1;
-            dir ? coords.push(s[2], s[3]) : coords.unshift(s[0], s[1]);
-            found = true; break;
-          } else if (Math.abs(s[2]-tx)+Math.abs(s[3]-ty) < 0.05) {
-            used[j] = 1;
-            dir ? coords.push(s[0], s[1]) : coords.unshift(s[2], s[3]);
-            found = true; break;
-          }
-        }
-        if (!found) break;
-      }
-    }
-    if (coords.length >= 4) lines.push(new Float32Array(coords));
-  }
-  return lines;
-}
-
-// ---- Reusable canvases (sized per-call) ----
-let _rc = null, _fc = null;
-function getCanvas(sz) {
-  if (!_rc || _rc.width !== sz) _rc = new OffscreenCanvas(sz, sz);
-  if (!_fc || _fc.width !== TILE_SIZE) _fc = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  return { rc: _rc, fc: _fc };
-}
-
-// ---- 1px transparent PNG (cached for flat tiles) ----
-let _emptyTile = null;
-async function emptyTile() {
-  if (_emptyTile) return _emptyTile;
-  const c = new OffscreenCanvas(1, 1);
-  c.getContext('2d').clearRect(0,0,1,1);
-  const b = await c.convertToBlob({ type: 'image/png' });
-  _emptyTile = new Uint8Array(await b.arrayBuffer());
-  return _emptyTile;
-}
-
-maplibregl.addProtocol('contour-raster', async (params, abortController) => {
-  const parts = params.url.replace('contour-raster://', '').split('/');
-  const z = parseInt(parts[0]), x = parseInt(parts[1]), y = parseInt(parts[2]);
-
-  // ---- Check rendered tile cache ----
-  const tileKey = (z << 24) | (x << 12) | y;
-  if (_tileCache.has(tileKey)) {
-    const v = _tileCache.get(tileKey);
-    _tileCache.delete(tileKey); _tileCache.set(tileKey, v);
-    return { data: v };
-  }
-
-  const demZ = Math.min(z, DEM_MAX_ZOOM);
-  const scale = 1 << (z - demZ);
-  const demX = (x / scale) | 0;
-  const demY = (y / scale) | 0;
-  const offX = (x - demX * scale) / scale;
-  const offY = (y - demY * scale) / scale;
-  const span = 1 / scale;
-
-  const dem = await fetchDemTile(demZ, demX, demY, abortController.signal);
-  const intervals = CONTOUR_INTERVALS[Math.min(z,15)] || CONTOUR_INTERVALS[15];
-  const minor = intervals[0];
-
-  // ---- Early exit: flat tile (elevation range < minor interval) ----
-  // Quick check using DEM tile min/max (conservative, may include area outside this tile)
-  if (dem.max - dem.min < minor * 0.5 && dem.min > 0) {
-    const empty = await emptyTile();
-    _tileCache.set(tileKey, empty);
-    if (_tileCache.size > TILE_CACHE_MAX) _tileCache.delete(_tileCache.keys().next().value);
-    return { data: empty };
-  }
-
-  const RS = 512;
-  const gs = RS + 1;
-  const { rc, fc } = getCanvas(RS);
-
-  // Bilinear-interpolated elevation grid
-  const elev = new Float32Array(gs * gs);
-  const de = dem.elev;
-  const rsInv = 1 / RS;
-  const spanTs = span * TILE_SIZE;
-  const oXT = offX * TILE_SIZE;
-  const oYT = offY * TILE_SIZE;
-  for (let py = 0; py < gs; py++) {
-    const fy = oYT + py * rsInv * spanTs;
-    const iy = Math.min(fy | 0, TILE_SIZE - 2);
-    const dy = fy - iy;
-    const r0 = iy * TILE_SIZE, r1 = r0 + TILE_SIZE;
-    const dy1 = 1 - dy;
-    for (let px = 0; px < gs; px++) {
-      const fx = oXT + px * rsInv * spanTs;
-      const ix = Math.min(fx | 0, TILE_SIZE - 2);
-      const dx = fx - ix;
-      elev[py*gs+px] = (de[r0+ix]*(1-dx) + de[r0+ix+1]*dx)*dy1 + (de[r1+ix]*(1-dx) + de[r1+ix+1]*dx)*dy;
-    }
-  }
-
-  // Blur only at low zoom to reduce DEM noise; skip at high zoom to preserve detail
-  const se = z <= 12 ? blurElevation(elev, gs, gs) : elev;
-
-  const major = intervals[1];
-
-  // Marching squares → flat segment arrays [x0,y0,x1,y1]
-  const minorSegs = [], majorSegs = [];
-  for (let py = 0; py < RS; py++) {
-    const r0 = py * gs, r1 = r0 + gs;
-    for (let px = 0; px < RS; px++) {
-      const e00 = se[r0+px], e10 = se[r0+px+1], e01 = se[r1+px], e11 = se[r1+px+1];
-      if (e00 < 1 && e10 < 1 && e01 < 1 && e11 < 1) continue;
-      const c00 = Math.floor(e00/minor), c10 = Math.floor(e10/minor), c01 = Math.floor(e01/minor), c11 = Math.floor(e11/minor);
-      if (c00===c10 && c00===c01 && c00===c11) continue;
-      const lo = Math.min(c00,c10,c01,c11), hi = Math.max(c00,c10,c01,c11);
-      for (let c = lo+1; c <= hi; c++) {
-        const cv = c * minor;
-        if (cv <= 0) continue;
-        // Inline crossing detection → flat [x0,y0,x1,y1]
-        let n = 0;
-        const cr = [0,0,0,0, 0,0,0,0]; // max 4 crossings → 2 segments
-        if ((e00-cv)*(e10-cv)<0) { cr[n++]=px+(cv-e00)/(e10-e00); cr[n++]=py; }
-        if ((e01-cv)*(e11-cv)<0) { cr[n++]=px+(cv-e01)/(e11-e01); cr[n++]=py+1; }
-        if ((e00-cv)*(e01-cv)<0) { cr[n++]=px; cr[n++]=py+(cv-e00)/(e01-e00); }
-        if ((e10-cv)*(e11-cv)<0) { cr[n++]=px+1; cr[n++]=py+(cv-e10)/(e11-e10); }
-        if (n >= 4) {
-          const dst = cv % major === 0 ? majorSegs : minorSegs;
-          dst.push([cr[0],cr[1],cr[2],cr[3]]);
-          if (n >= 8) dst.push([cr[4],cr[5],cr[6],cr[7]]);
-        }
-      }
-    }
-  }
-
-  // Chain → smooth
-  const minorLines = chainSegments(minorSegs).map(smoothLine);
-  const majorLines = chainSegments(majorSegs).map(smoothLine);
-
-  // Render
-  const ctx = rc.getContext('2d');
-  ctx.clearRect(0, 0, RS, RS);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  // Batch all minor lines in one path
-  if (minorLines.length) {
-    ctx.strokeStyle = 'rgba(56, 142, 60, 0.5)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    for (const ln of minorLines) {
-      ctx.moveTo(ln[0], ln[1]);
-      for (let i = 2; i < ln.length; i += 2) ctx.lineTo(ln[i], ln[i+1]);
-    }
-    ctx.stroke();
-  }
-
-  // Batch all major lines in one path
-  if (majorLines.length) {
-    ctx.strokeStyle = 'rgba(46, 125, 50, 0.8)';
-    ctx.lineWidth = 2.8;
-    ctx.beginPath();
-    for (const ln of majorLines) {
-      ctx.moveTo(ln[0], ln[1]);
-      for (let i = 2; i < ln.length; i += 2) ctx.lineTo(ln[i], ln[i+1]);
-    }
-    ctx.stroke();
-  }
-
-  // Output (skip downscale if RS=256)
-  let outCanvas = rc;
-  if (RS > TILE_SIZE) {
-    const fctx = fc.getContext('2d');
-    fctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
-    fctx.drawImage(rc, 0, 0, TILE_SIZE, TILE_SIZE);
-    outCanvas = fc;
-  }
-  const blob = await outCanvas.convertToBlob({ type: 'image/png' });
-  const result = new Uint8Array(await blob.arrayBuffer());
-
-  // Cache rendered tile
-  if (_tileCache.size >= TILE_CACHE_MAX) _tileCache.delete(_tileCache.keys().next().value);
-  _tileCache.set(tileKey, result);
-
-  return { data: result };
-});
 
 // ===== Map (base only — contours added after load) =====
 const map = new maplibregl.Map({
@@ -527,20 +240,54 @@ map.on('load', () => {
     }
   }); } catch(e) { console.warn('elev-color-layer skipped:', e.message); }
 
-  // --- Contour lines (custom raster protocol — no external library) ---
-  map.addSource('contour-raster-src', {
-    type: 'raster',
-    tiles: ['contour-raster://{z}/{x}/{y}'],
-    tileSize: 256,
-    maxzoom: 15,
-    minzoom: 10
-  });
-  map.addLayer({
-    id: 'contour-raster-layer', type: 'raster', source: 'contour-raster-src',
-    paint: {
-      'raster-opacity': parseInt(document.getElementById('contourOpacity').value) / 100
-    }
-  });
+  // --- Contour lines (maplibre-contour vector) ---
+  try {
+    const demSource = new mlcontour.DemSource({
+      url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+      encoding: 'terrarium',
+      maxzoom: 13,
+      worker: true
+    });
+    demSource.setupMaplibre(maplibregl);
+
+    map.addSource('contour-source', {
+      type: 'vector',
+      tiles: [demSource.contourProtocolUrl({
+        multiplier: 1,
+        overzoom: 1,
+        thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },
+        elevationKey: 'ele',
+        levelKey: 'level',
+        contourLayer: 'contours'
+      })],
+      maxzoom: 15
+    });
+
+    const cOpacity = parseInt(document.getElementById('contourOpacity').value) / 100;
+    // Minor contour lines
+    map.addLayer({
+      id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 0],
+      paint: { 'line-color': 'rgba(56, 142, 60, 0.5)', 'line-width': 1.2, 'line-opacity': cOpacity }
+    });
+    // Major contour lines
+    map.addLayer({
+      id: 'contour-lines-major', type: 'line', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 1],
+      paint: { 'line-color': 'rgba(46, 125, 50, 0.8)', 'line-width': 2.5, 'line-opacity': cOpacity }
+    });
+    // Labels on major contours
+    map.addLayer({
+      id: 'contour-labels', type: 'symbol', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 1],
+      layout: {
+        'symbol-placement': 'line', 'text-field': ['concat', ['get','ele'], 'm'],
+        'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+        'text-max-angle': 25, 'text-padding': 40
+      },
+      paint: { 'text-color': 'rgba(46,125,50,0.9)', 'text-halo-color': 'rgba(255,255,255,0.85)', 'text-halo-width': 1.5, 'text-opacity': cOpacity }
+    });
+  } catch(err) { console.warn('Contour init failed:', err); }
 
   // Hypsometric tint - elevation coloring using hillshade
   map.addLayer({
@@ -554,7 +301,7 @@ map.on('load', () => {
       'hillshade-exaggeration': 0.8
     },
     layout: { 'visibility': 'visible' }
-  }, 'contour-raster-layer');
+  }, 'contour-lines');
 
   // --- Flat routes ---
   const flatRoutes = [
@@ -1125,13 +872,15 @@ document.getElementById('chkElevColor')?.addEventListener('change', e => {
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
-  try { map.setLayoutProperty('contour-raster-layer','visibility',v); } catch(err) {}
+  try { ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err) {}
 });
 
 document.getElementById('contourOpacity').addEventListener('input', e => {
   const v = e.target.value / 100;
   try {
-    map.setPaintProperty('contour-raster-layer', 'raster-opacity', v);
+    map.setPaintProperty('contour-lines', 'line-opacity', v);
+    map.setPaintProperty('contour-lines-major', 'line-opacity', v);
+    map.setPaintProperty('contour-labels', 'text-opacity', v);
   } catch(err) {}
 });
 

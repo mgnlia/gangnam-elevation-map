@@ -146,7 +146,7 @@ try {
     url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     encoding: 'terrarium',
     maxzoom: 13,
-    worker: false
+    worker: true
   });
   _demSource.setupMaplibre(maplibregl);
 } catch(e) {

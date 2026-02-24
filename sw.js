@@ -1,16 +1,15 @@
-const CACHE_NAME = 'seoul-elevation-map-v1';
+const CACHE_NAME = 'seoul-elevation-map-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.json'
 ];
 
-// External CDN resources to cache
+// External CDN resources to cache (updated versions)
 const CDN_RESOURCES = [
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
-  'https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js',
-  'https://unpkg.com/three@0.160.0/build/three.min.js'
+  'https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js',
 ];
 
 // Install event - cache app shell
@@ -22,12 +21,11 @@ self.addEventListener('install', (event) => {
         return cache.addAll(APP_SHELL);
       })
       .then(() => {
-        // Cache CDN resources separately (may fail if CORS)
         return caches.open(CACHE_NAME + '-cdn')
           .then((cdnCache) => {
             console.log('[SW] Caching CDN resources');
             return Promise.allSettled(
-              CDN_RESOURCES.map(url => 
+              CDN_RESOURCES.map(url =>
                 fetch(url, { mode: 'no-cors' })
                   .then(response => cdnCache.put(url, response))
                   .catch(err => console.log('[SW] Failed to cache:', url))
@@ -39,46 +37,41 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate event - clean up old caches
+// Activate event - wipe ALL old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name.startsWith('seoul-elevation-map-') && name !== CACHE_NAME && name !== CACHE_NAME + '-cdn' && name !== CACHE_NAME + '-tiles')
-          .map((name) => caches.delete(name))
+          .filter((name) => name !== CACHE_NAME && name !== CACHE_NAME + '-cdn' && name !== CACHE_NAME + '-tiles')
+          .map((name) => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  
-  // Map tiles caching strategy
-  if (url.hostname.includes('cartocdn.com') || 
-      url.hostname.includes('wmflabs.org') || 
-      url.hostname.includes('amazonaws.com') ||
-      url.hostname.includes('opentopomap.org')) {
-    
+
+  // Map tiles - cache first (tiles don't change)
+  if (url.hostname.includes('cartocdn.com') ||
+      url.hostname.includes('wmflabs.org') ||
+      url.hostname.includes('amazonaws.com')) {
     event.respondWith(
       caches.open(CACHE_NAME + '-tiles').then((cache) => {
         return cache.match(request).then((response) => {
-          if (response) {
-            // Return cached tile
-            return response;
-          }
-          
-          // Fetch and cache tile
+          if (response) return response;
           return fetch(request).then((networkResponse) => {
             if (networkResponse.ok) {
               cache.put(request, networkResponse.clone());
             }
             return networkResponse;
           }).catch(() => {
-            // Offline fallback - return transparent tile
             return new Response(
               new Blob([new Uint8Array([0x89, 0x50, 0x4E, 0x47])], { type: 'image/png' }),
               { status: 200, headers: { 'Content-Type': 'image/png' } }
@@ -89,8 +82,8 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  
-  // CDN resources
+
+  // CDN resources - cache first (versioned URLs don't change)
   if (CDN_RESOURCES.includes(request.url)) {
     event.respondWith(
       caches.open(CACHE_NAME + '-cdn').then((cache) => {
@@ -105,36 +98,26 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  
-  // App shell - cache first
+
+  // App shell (index.html) - NETWORK FIRST so updates deploy immediately
   if (request.mode === 'navigate' || APP_SHELL.includes(url.pathname)) {
     event.respondWith(
-      caches.match(request).then((response) => {
-        return response || fetch(request).then((networkResponse) => {
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, networkResponse.clone());
-            return networkResponse;
-          });
+      fetch(request).then((networkResponse) => {
+        // Update cache with fresh version
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, networkResponse.clone());
         });
+        return networkResponse;
+      }).catch(() => {
+        // Offline fallback
+        return caches.match(request);
       })
     );
     return;
   }
-  
-  // Default - network first with cache fallback
+
+  // Default - network first
   event.respondWith(
     fetch(request).catch(() => caches.match(request))
   );
 });
-
-// Background sync for offline actions (optional)
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-tiles') {
-    event.waitUntil(syncPendingTiles());
-  }
-});
-
-async function syncPendingTiles() {
-  // Could be used to prefetch tiles for a specific area
-  console.log('[SW] Background sync triggered');
-}

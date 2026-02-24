@@ -1,4 +1,4 @@
-const CACHE_NAME = 'seoul-elevation-map-v3';
+const CACHE_NAME = 'seoul-elevation-map-v4';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -9,7 +9,6 @@ const APP_SHELL = [
 const CDN_RESOURCES = [
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
-  'https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js',
 ];
 
 // Install event - cache app shell

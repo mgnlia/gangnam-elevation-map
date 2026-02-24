@@ -134,24 +134,140 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 &amp; 기울이기</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js"></script>
 <script>
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
-// ===== Contour DemSource — 맵 생성 전 프로토콜 등록 (ML GL 4.x Worker에 전달되려면 맵 init 전에 해야 함) =====
-let _demSource = null;
-try {
-  _demSource = new mlcontour.DemSource({
-    url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-    encoding: 'terrarium',
-    maxzoom: 13,
-    worker: true
-  });
-  _demSource.setupMaplibre(maplibregl);
-} catch(e) {
-  console.error('mlcontour init failed:', e);
-}
+// ===== Custom contour raster protocol (no external library) =====
+const CONTOUR_INTERVALS = { 10:[50,250], 11:[20,100], 12:[10,50], 13:[5,20], 14:[5,20], 15:[2,10] };
+const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+const DEM_MAX_ZOOM = 13;
+const TILE_SIZE = 256;
+
+maplibregl.addProtocol('contour-raster', async (params, abortController) => {
+  const parts = params.url.replace('contour-raster://', '').split('/');
+  const z = parseInt(parts[0]), x = parseInt(parts[1]), y = parseInt(parts[2]);
+
+  // Clamp DEM fetch zoom
+  const demZ = Math.min(z, DEM_MAX_ZOOM);
+  const scale = Math.pow(2, z - demZ);
+  const demX = Math.floor(x / scale);
+  const demY = Math.floor(y / scale);
+  const offX = (x - demX * scale) / scale;
+  const offY = (y - demY * scale) / scale;
+  const span = 1 / scale;
+
+  // Fetch DEM tile
+  const demUrl = DEM_URL.replace('{z}', demZ).replace('{x}', demX).replace('{y}', demY);
+  const resp = await fetch(demUrl, { signal: abortController.signal });
+  if (!resp.ok) throw new Error(`DEM fetch failed: ${resp.status}`);
+
+  const blob = await resp.blob();
+  const bmp = await createImageBitmap(blob);
+
+  // Read pixel data (full tile then extract sub-region if overzoomed)
+  const readCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+  const rctx = readCanvas.getContext('2d');
+  rctx.drawImage(bmp, 0, 0, TILE_SIZE, TILE_SIZE);
+  const fullData = rctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
+
+  // Decode terrarium to elevation grid (for the sub-region we need)
+  const gs = TILE_SIZE + 1; // grid size with 1px overlap for edge detection
+  const elev = new Float32Array(gs * gs);
+  for (let py = 0; py < gs; py++) {
+    for (let px = 0; px < gs; px++) {
+      // Map output pixel to DEM pixel
+      let sx = Math.floor(offX * TILE_SIZE + (px / TILE_SIZE) * span * TILE_SIZE);
+      let sy = Math.floor(offY * TILE_SIZE + (py / TILE_SIZE) * span * TILE_SIZE);
+      sx = Math.min(sx, TILE_SIZE - 1);
+      sy = Math.min(sy, TILE_SIZE - 1);
+      const i = (sy * TILE_SIZE + sx) * 4;
+      elev[py * gs + px] = fullData[i] * 256 + fullData[i + 1] + fullData[i + 2] / 256 - 32768;
+    }
+  }
+
+  // Get contour intervals for this zoom
+  const intervals = CONTOUR_INTERVALS[Math.min(z, 15)] || CONTOUR_INTERVALS[15];
+  const minor = intervals[0], major = intervals[1];
+
+  // Draw contour lines on output canvas
+  const out = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+  const ctx = out.getContext('2d');
+  ctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+
+  // Marching squares-style contour tracing
+  for (let py = 0; py < TILE_SIZE; py++) {
+    for (let px = 0; px < TILE_SIZE; px++) {
+      const e00 = elev[py * gs + px];
+      const e10 = elev[py * gs + px + 1];
+      const e01 = elev[(py + 1) * gs + px];
+      const e11 = elev[(py + 1) * gs + px + 1];
+
+      // Check for contour crossings at minor interval
+      const c00 = Math.floor(e00 / minor);
+      const c10 = Math.floor(e10 / minor);
+      const c01 = Math.floor(e01 / minor);
+      const c11 = Math.floor(e11 / minor);
+
+      if (c00 === c10 && c00 === c01 && c00 === c11) continue; // no crossing
+
+      // Determine which contour value is being crossed
+      const minE = Math.min(e00, e10, e01, e11);
+      const crossVal = (Math.floor(minE / minor) + 1) * minor;
+      const isMajor = crossVal % major === 0;
+
+      // Interpolate crossing points on cell edges for line segments
+      const crossings = [];
+      // Top edge (e00 → e10)
+      if ((e00 - crossVal) * (e10 - crossVal) < 0) {
+        const t = (crossVal - e00) / (e10 - e00);
+        crossings.push([px + t, py]);
+      }
+      // Bottom edge (e01 → e11)
+      if ((e01 - crossVal) * (e11 - crossVal) < 0) {
+        const t = (crossVal - e01) / (e11 - e01);
+        crossings.push([px + t, py + 1]);
+      }
+      // Left edge (e00 → e01)
+      if ((e00 - crossVal) * (e01 - crossVal) < 0) {
+        const t = (crossVal - e00) / (e01 - e00);
+        crossings.push([px, py + t]);
+      }
+      // Right edge (e10 → e11)
+      if ((e10 - crossVal) * (e11 - crossVal) < 0) {
+        const t = (crossVal - e10) / (e11 - e10);
+        crossings.push([px + 1, py + t]);
+      }
+
+      // Draw line segments between crossing pairs
+      if (crossings.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(crossings[0][0], crossings[0][1]);
+        ctx.lineTo(crossings[1][0], crossings[1][1]);
+        if (isMajor) {
+          ctx.strokeStyle = 'rgba(80, 40, 0, 0.85)';
+          ctx.lineWidth = 1.8;
+        } else {
+          ctx.strokeStyle = 'rgba(110, 70, 20, 0.55)';
+          ctx.lineWidth = 0.8;
+        }
+        ctx.stroke();
+        // If 4 crossings (saddle point), draw second segment
+        if (crossings.length === 4) {
+          ctx.beginPath();
+          ctx.moveTo(crossings[2][0], crossings[2][1]);
+          ctx.lineTo(crossings[3][0], crossings[3][1]);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  // Return as PNG
+  const outBlob = await out.convertToBlob({ type: 'image/png' });
+  const buffer = await outBlob.arrayBuffer();
+  return { data: new Uint8Array(buffer) };
+});
 
 // ===== Map (base only — contours added after load) =====
 const map = new maplibregl.Map({
@@ -255,104 +371,34 @@ map.on('load', () => {
     }
   });
 
-  // --- Contour lines from DEM ---
-  try {
-    if (!_demSource) throw new Error('DemSource unavailable');
+  // --- Contour lines (custom raster protocol — no external library) ---
+  map.addSource('contour-raster-src', {
+    type: 'raster',
+    tiles: ['contour-raster://{z}/{x}/{y}'],
+    tileSize: 256,
+    maxzoom: 15,
+    minzoom: 10
+  });
+  map.addLayer({
+    id: 'contour-raster-layer', type: 'raster', source: 'contour-raster-src',
+    paint: {
+      'raster-opacity': parseInt(document.getElementById('contourOpacity').value) / 100
+    }
+  });
 
-    map.addSource('contour-source', {
-      type: 'vector',
-      tiles: [_demSource.contourProtocolUrl({
-        multiplier: 1,
-        overzoom: 1,
-        thresholds: { 11: [20], 12: [10,50], 13: [5,20], 14: [5,20], 15: [2,10] },
-        elevationKey: 'ele',
-        levelKey: 'level',
-        contourLayer: 'contours'
-      })],
-      maxzoom: 15
-    });
-
-    // Minor contour lines
-    map.addLayer({
-      id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
-      filter: ['==', ['get','level'], 0],
-      paint: { 'line-color': 'rgba(100, 60, 0, 0.7)', 'line-width': 1.2 }
-    });
-    // Major contour lines
-    map.addLayer({
-      id: 'contour-lines-major', type: 'line', source: 'contour-source', 'source-layer': 'contours',
-      filter: ['==', ['get','level'], 1],
-      paint: { 'line-color': 'rgba(80, 40, 0, 0.9)', 'line-width': 2.0 }
-    });
-    // Labels on major lines
-    map.addLayer({
-      id: 'contour-labels', type: 'symbol', source: 'contour-source', 'source-layer': 'contours',
-      filter: ['==', ['get','level'], 1],
-      layout: {
-        'symbol-placement': 'line', 'text-field': ['concat', ['get','ele'], 'm'],
-        'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
-        'text-max-angle': 25, 'text-padding': 40
-      },
-      paint: { 'text-color': 'rgba(80,40,0,0.95)', 'text-halo-color': 'rgba(255,255,255,0.9)', 'text-halo-width': 2 }
-    });
-
-    // Contour fill bands (between contour lines) - DISABLED (contour source is lines, not polygons)
-    // To enable hypsometric tinting, use a raster color ramp layer instead
-    /*
-    map.addLayer({
-      id: 'contour-fill-bands', type: 'fill', source: 'contour-source', 'source-layer': 'contours',
-      filter: ['==', ['get','level'], 1],
-      paint: {
-        'fill-color': [
-          'interpolate', ['linear'], ['get','ele'],
-          0, 'rgba(255,255,224,0.15)',
-          50, 'rgba(255,237,160,0.18)',
-          100, 'rgba(254,217,118,0.20)',
-          150, 'rgba(254,178,76,0.22)',
-          200, 'rgba(253,141,60,0.24)',
-          250, 'rgba(252,78,42,0.26)',
-          300, 'rgba(227,26,28,0.28)'
-        ],
-        'fill-opacity': 0.25
-      },
-      layout: { 'visibility': 'none' }
-    }, 'contour-lines');
-    */
-
-    // Set initial contour opacity from slider value
-    const initOpacity = parseInt(document.getElementById('contourOpacity').value) / 100;
-    map.setPaintProperty('contour-lines', 'line-opacity', initOpacity);
-    map.setPaintProperty('contour-lines-major', 'line-opacity', initOpacity);
-    map.setPaintProperty('contour-labels', 'text-opacity', initOpacity);
-
-    // Hypsometric tint - elevation coloring using hillshade with accent colors
-    // Yellow(low) -> Red(high) elevation visualization
-    map.addLayer({
-      id: 'elevation-color-overlay',
-      type: 'hillshade',
-      source: 'terrain-dem',
-      paint: {
-        'hillshade-shadow-color': 'rgba(255,200,100,0.2)',
-        'hillshade-highlight-color': 'rgba(255,100,100,0.15)',
-        'hillshade-accent-color': 'rgba(200,50,50,0.25)',
-        'hillshade-exaggeration': 0.8
-      },
-      layout: { 'visibility': 'visible' }
-    }, 'contour-lines');
-
-    // Elevation color legend reference
-    const elevColors = [
-      { h: 0, c: '#ffffb2' },
-      { h: 50, c: '#fed976' },
-      { h: 100, c: '#feb24c' },
-      { h: 150, c: '#fd8d3c' },
-      { h: 200, c: '#fc4e2a' },
-      { h: 250, c: '#e31a1c' },
-      { h: 300, c: '#b10026' }
-    ];
-  } catch(err) {
-    console.warn('Contour init failed:', err);
-  }
+  // Hypsometric tint - elevation coloring using hillshade
+  map.addLayer({
+    id: 'elevation-color-overlay',
+    type: 'hillshade',
+    source: 'terrain-dem',
+    paint: {
+      'hillshade-shadow-color': 'rgba(255,200,100,0.2)',
+      'hillshade-highlight-color': 'rgba(255,100,100,0.15)',
+      'hillshade-accent-color': 'rgba(200,50,50,0.25)',
+      'hillshade-exaggeration': 0.8
+    },
+    layout: { 'visibility': 'visible' }
+  }, 'contour-raster-layer');
 
   // --- Flat routes ---
   const flatRoutes = [
@@ -923,15 +969,13 @@ document.getElementById('chkElevColor')?.addEventListener('change', e => {
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
   const v = e.target.checked ? 'visible' : 'none';
-  try { ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err) {}
+  try { map.setLayoutProperty('contour-raster-layer','visibility',v); } catch(err) {}
 });
 
 document.getElementById('contourOpacity').addEventListener('input', e => {
   const v = e.target.value / 100;
   try {
-    map.setPaintProperty('contour-lines', 'line-opacity', v);
-    map.setPaintProperty('contour-lines-major', 'line-opacity', v);
-    map.setPaintProperty('contour-labels', 'text-opacity', v);
+    map.setPaintProperty('contour-raster-layer', 'raster-opacity', v);
   } catch(err) {}
 });
 

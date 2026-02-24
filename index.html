@@ -134,23 +134,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 &amp; 기울이기</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js"></script>
+<script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
 <script>
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
-// ===== Contour DemSource — 맵 생성 전에 프로토콜 등록 =====
-let demSource = null;
+// ===== Contour DemSource — 맵 생성 전 프로토콜 등록 (ML GL 4.x Worker에 전달되려면 맵 init 전에 해야 함) =====
+let _demSource = null;
 try {
-  demSource = new mlcontour.DemSource({
+  _demSource = new mlcontour.DemSource({
     url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     encoding: 'terrarium',
     maxzoom: 13,
-    worker: false   // main thread에서 처리 (worker CORS 문제 방지)
+    worker: true
   });
-  demSource.setupMaplibre(maplibregl);
+  _demSource.setupMaplibre(maplibregl);
 } catch(e) {
-  console.error('mlcontour DemSource 초기화 실패:', e);
+  console.error('mlcontour init failed:', e);
 }
 
 // ===== Map (base only — contours added after load) =====
@@ -257,11 +257,11 @@ map.on('load', () => {
 
   // --- Contour lines from DEM ---
   try {
-    if (!demSource) throw new Error('DemSource not initialized');
+    if (!_demSource) throw new Error('DemSource unavailable');
 
     map.addSource('contour-source', {
       type: 'vector',
-      tiles: [demSource.contourProtocolUrl({
+      tiles: [_demSource.contourProtocolUrl({
         multiplier: 1,
         overzoom: 1,
         thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },
@@ -276,13 +276,13 @@ map.on('load', () => {
     map.addLayer({
       id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
       filter: ['==', ['get','level'], 0],
-      paint: { 'line-color': 'rgba(56, 142, 60, 0.5)', 'line-width': 1.2 }
+      paint: { 'line-color': 'rgba(100, 60, 0, 0.65)', 'line-width': 1.0 }
     });
     // Major contour lines
     map.addLayer({
       id: 'contour-lines-major', type: 'line', source: 'contour-source', 'source-layer': 'contours',
       filter: ['==', ['get','level'], 1],
-      paint: { 'line-color': 'rgba(46, 125, 50, 0.8)', 'line-width': 2.5 }
+      paint: { 'line-color': 'rgba(80, 40, 0, 0.9)', 'line-width': 2.0 }
     });
     // Labels on major lines
     map.addLayer({
@@ -293,7 +293,7 @@ map.on('load', () => {
         'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
         'text-max-angle': 25, 'text-padding': 40
       },
-      paint: { 'text-color': 'rgba(46,125,50,0.9)', 'text-halo-color': 'rgba(255,255,255,0.85)', 'text-halo-width': 1.5 }
+      paint: { 'text-color': 'rgba(80,40,0,0.95)', 'text-halo-color': 'rgba(255,255,255,0.9)', 'text-halo-width': 2 }
     });
 
     // Contour fill bands (between contour lines) - DISABLED (contour source is lines, not polygons)

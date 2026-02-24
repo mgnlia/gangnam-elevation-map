@@ -264,7 +264,7 @@ map.on('load', () => {
       tiles: [_demSource.contourProtocolUrl({
         multiplier: 1,
         overzoom: 1,
-        thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },
+        thresholds: { 11: [20], 12: [10,50], 13: [5,20], 14: [5,20], 15: [2,10] },
         elevationKey: 'ele',
         levelKey: 'level',
         contourLayer: 'contours'
@@ -276,7 +276,7 @@ map.on('load', () => {
     map.addLayer({
       id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
       filter: ['==', ['get','level'], 0],
-      paint: { 'line-color': 'rgba(100, 60, 0, 0.65)', 'line-width': 1.0 }
+      paint: { 'line-color': 'rgba(100, 60, 0, 0.7)', 'line-width': 1.2 }
     });
     // Major contour lines
     map.addLayer({

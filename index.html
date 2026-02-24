@@ -182,8 +182,8 @@ async function fetchDemTile(z, x, y, signal) {
 const _tileCache = new Map();
 const TILE_CACHE_MAX = 128;
 
-// ---- Chaikin smoothing (1 pass, flat Float32) ----
-function smoothLine(pts) {
+// ---- Chaikin smoothing (2 passes, flat Float32) ----
+function smoothLine1(pts) {
   const n = pts.length;
   if (n < 6) return pts;
   const out = new Float32Array(2 + (n - 2) * 2 + 2);
@@ -197,6 +197,7 @@ function smoothLine(pts) {
   out[o++] = pts[n-2]; out[o++] = pts[n-1];
   return out.subarray(0, o);
 }
+function smoothLine(pts) { return smoothLine1(smoothLine1(pts)); }
 
 // ---- Separable blur (in-place capable) ----
 function blurElevation(src, w, h) {
@@ -219,7 +220,8 @@ function blurElevation(src, w, h) {
 function chainSegments(segs) {
   const n = segs.length;
   if (!n) return [];
-  const key = (x,y) => ((x*128|0) << 20) | (y*128|0);
+  // Round to nearest 1/64 for spatial hash — marching squares produce exact cell-edge coords
+  const key = (x,y) => ((x*64+0.5|0) << 20) | (y*64+0.5|0);
   const adj = new Map();
   for (let i = 0; i < n; i++) {
     const s = segs[i];
@@ -244,11 +246,11 @@ function chainSegments(segs) {
         for (const j of cands) {
           if (used[j]) continue;
           const s = segs[j];
-          if (Math.abs(s[0]-tx)+Math.abs(s[1]-ty) < 0.02) {
+          if (Math.abs(s[0]-tx)+Math.abs(s[1]-ty) < 0.05) {
             used[j] = 1;
             dir ? coords.push(s[2], s[3]) : coords.unshift(s[0], s[1]);
             found = true; break;
-          } else if (Math.abs(s[2]-tx)+Math.abs(s[3]-ty) < 0.02) {
+          } else if (Math.abs(s[2]-tx)+Math.abs(s[3]-ty) < 0.05) {
             used[j] = 1;
             dir ? coords.push(s[0], s[1]) : coords.unshift(s[2], s[3]);
             found = true; break;
@@ -257,7 +259,7 @@ function chainSegments(segs) {
         if (!found) break;
       }
     }
-    if (coords.length >= 6) lines.push(new Float32Array(coords));
+    if (coords.length >= 4) lines.push(new Float32Array(coords));
   }
   return lines;
 }
@@ -339,8 +341,8 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
     }
   }
 
-  // Single blur pass
-  const se = blurElevation(elev, gs, gs);
+  // Blur only at low zoom to reduce DEM noise; skip at high zoom to preserve detail
+  const se = z <= 12 ? blurElevation(elev, gs, gs) : elev;
 
   const major = intervals[1];
 
@@ -351,7 +353,7 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
     for (let px = 0; px < RS; px++) {
       const e00 = se[r0+px], e10 = se[r0+px+1], e01 = se[r1+px], e11 = se[r1+px+1];
       if (e00 < 1 && e10 < 1 && e01 < 1 && e11 < 1) continue;
-      const c00 = e00/minor|0, c10 = e10/minor|0, c01 = e01/minor|0, c11 = e11/minor|0;
+      const c00 = Math.floor(e00/minor), c10 = Math.floor(e10/minor), c01 = Math.floor(e01/minor), c11 = Math.floor(e11/minor);
       if (c00===c10 && c00===c01 && c00===c11) continue;
       const lo = Math.min(c00,c10,c01,c11), hi = Math.max(c00,c10,c01,c11);
       for (let c = lo+1; c <= hi; c++) {

@@ -350,26 +350,24 @@ map.on('load', () => {
     tileSize: 256,
     maxzoom: 13
   });
-  map.addLayer({
+  try { map.addLayer({
     id: 'elev-color-layer', type: 'raster', source: 'elev-color',
     paint: {
       'raster-color-mix': [65280, 255, 1, -32768],
       'raster-color-range': [-10, 350],
-      // raster-value는 0~1 정규화값: (고도 - (-10)) / (350 - (-10))
-      // 0m → 0.028 / 30m → 0.111 / 60m → 0.194 / 100m → 0.306 / 150m → 0.444 / 250m → 0.722
       'raster-color': [
         'interpolate', ['linear'], ['raster-value'],
-        0.000, 'rgba(180, 220, 160, 0)',   // -10m 이하 - 투명
-        0.028, 'rgba(180, 220, 160, 0.52)', // 0m   연한 초록
-        0.111, 'rgba(215, 228, 140, 0.52)', // 30m  연두-노랑
-        0.194, 'rgba(238, 220, 115, 0.54)', // 60m  연한 노랑
-        0.306, 'rgba(248, 200, 105, 0.56)', // 100m 연한 주황
-        0.444, 'rgba(248, 172,  95, 0.58)', // 150m 주황
-        0.722, 'rgba(238, 140,  95, 0.60)', // 250m 진한 주황
-        1.000, 'rgba(220, 110,  90, 0.62)'  // 350m 연한 빨강
+        0.000, 'rgba(180, 220, 160, 0)',
+        0.028, 'rgba(180, 220, 160, 0.52)',
+        0.111, 'rgba(215, 228, 140, 0.52)',
+        0.194, 'rgba(238, 220, 115, 0.54)',
+        0.306, 'rgba(248, 200, 105, 0.56)',
+        0.444, 'rgba(248, 172,  95, 0.58)',
+        0.722, 'rgba(238, 140,  95, 0.60)',
+        1.000, 'rgba(220, 110,  90, 0.62)'
       ]
     }
-  });
+  }); } catch(e) { console.warn('elev-color-layer skipped:', e.message); }
 
   // --- Contour lines (custom raster protocol — no external library) ---
   map.addSource('contour-raster-src', {

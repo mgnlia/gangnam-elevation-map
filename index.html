@@ -195,7 +195,7 @@ map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: t
 const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const controlHintText = isMobile
   ? '🤏 두 손가락 회전 / 기울이기'
-  : '⌨️ WASD: 이동 &nbsp;|&nbsp; 우클릭: 회전 &nbsp;|&nbsp; 휠버튼: 회전·기울기';
+  : '⌨️ WASD: 이동 &nbsp;|&nbsp; Space/Shift: 상승·하강 &nbsp;|&nbsp; 우클릭: 회전';
 
 document.getElementById('pitchHint').innerHTML = controlHintText;
 const legendHint = document.getElementById('legendControlHint');
@@ -1034,6 +1034,7 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
   const wasdKeys = {};
   let wasdRaf = null;
   const PAN_SPEED = 6; // px/frame
+  const VERTICAL_SPEED = 0.02; // zoom/frame
 
   function wasdLoop() {
     if (!Object.values(wasdKeys).some(Boolean)) {
@@ -1049,6 +1050,16 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
     // 대각선 이동 시 속도 정규화
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
     map.panBy([dx, dy], { animate: false });
+
+    // Minecraft-like vertical motion:
+    // Space = ascend (zoom out), Shift = descend (zoom in)
+    let zoomDelta = 0;
+    if (wasdKeys['space']) zoomDelta -= VERTICAL_SPEED;
+    if (wasdKeys['shift']) zoomDelta += VERTICAL_SPEED;
+    if (zoomDelta !== 0) {
+      const nextZoom = Math.max(11, Math.min(18, map.getZoom() + zoomDelta));
+      map.jumpTo({ zoom: nextZoom });
+    }
   }
 
   // e.code = 물리 키 위치 (한국어 IME 활성화 상태에도 불변)
@@ -1056,7 +1067,9 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
 
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const key = CODE_TO_WASD[e.code];
+    const key = CODE_TO_WASD[e.code]
+      || (e.code === 'Space' ? 'space' : null)
+      || (e.code === 'ShiftLeft' || e.code === 'ShiftRight' ? 'shift' : null);
     if (key) {
       e.preventDefault();
       wasdKeys[key] = true;
@@ -1065,8 +1078,15 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
   });
 
   document.addEventListener('keyup', e => {
-    const key = CODE_TO_WASD[e.code];
+    const key = CODE_TO_WASD[e.code]
+      || (e.code === 'Space' ? 'space' : null)
+      || (e.code === 'ShiftLeft' || e.code === 'ShiftRight' ? 'shift' : null);
     if (key) wasdKeys[key] = false;
+  });
+
+  // 탭 전환/포커스 해제 시 키 상태 초기화
+  window.addEventListener('blur', () => {
+    Object.keys(wasdKeys).forEach(k => { wasdKeys[k] = false; });
   });
 }
 

@@ -134,7 +134,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 &amp; 기울이기</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
+<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js"></script>
 <script>
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
@@ -146,7 +146,7 @@ try {
     url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     encoding: 'terrarium',
     maxzoom: 13,
-    worker: true
+    worker: false
   });
   _demSource.setupMaplibre(maplibregl);
 } catch(e) {
@@ -318,6 +318,12 @@ map.on('load', () => {
       layout: { 'visibility': 'none' }
     }, 'contour-lines');
     */
+
+    // Set initial contour opacity from slider value
+    const initOpacity = parseInt(document.getElementById('contourOpacity').value) / 100;
+    map.setPaintProperty('contour-lines', 'line-opacity', initOpacity);
+    map.setPaintProperty('contour-lines-major', 'line-opacity', initOpacity);
+    map.setPaintProperty('contour-labels', 'text-opacity', initOpacity);
 
     // Hypsometric tint - elevation coloring using hillshade with accent colors
     // Yellow(low) -> Red(high) elevation visualization

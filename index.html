@@ -138,18 +138,68 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
 
-// ===== Custom contour raster protocol (no external library) =====
-const CONTOUR_INTERVALS = { 10:[50,250], 11:[20,100], 12:[10,50], 13:[10,50], 14:[5,20], 15:[5,20] };
+// ===== Custom contour raster protocol — polyline tracing =====
+const CONTOUR_INTERVALS = { 10:[100,500], 11:[50,200], 12:[20,100], 13:[20,100], 14:[10,50], 15:[10,50] };
 const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const DEM_MAX_ZOOM = 13;
 const TILE_SIZE = 256;
-const RENDER_SIZE = 512; // 2x supersampling for smooth lines
+const RENDER_SIZE = 512;
+
+// Chain segments into polylines: O(n) via spatial hash
+function chainSegments(segs) {
+  if (!segs.length) return [];
+  const eps = 0.01;
+  const key = (p) => `${(p[0]/eps|0)},${(p[1]/eps|0)}`;
+  // Build adjacency: endpoint → list of segment indices
+  const adj = new Map();
+  for (let i = 0; i < segs.length; i++) {
+    for (const p of [segs[i][0], segs[i][1]]) {
+      const k = key(p);
+      if (!adj.has(k)) adj.set(k, []);
+      adj.get(k).push(i);
+    }
+  }
+  const used = new Uint8Array(segs.length);
+  const lines = [];
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    let line = [segs[i][0], segs[i][1]];
+    // Extend forward from line end
+    for (let dir = 1; dir >= 0; dir--) {
+      let extended = true;
+      while (extended) {
+        extended = false;
+        const tip = dir ? line[line.length - 1] : line[0];
+        const k = key(tip);
+        const cands = adj.get(k);
+        if (!cands) break;
+        for (const j of cands) {
+          if (used[j]) continue;
+          const s = segs[j];
+          const d0 = Math.abs(s[0][0]-tip[0])+Math.abs(s[0][1]-tip[1]);
+          const d1 = Math.abs(s[1][0]-tip[0])+Math.abs(s[1][1]-tip[1]);
+          if (d0 < eps) {
+            used[j] = 1;
+            dir ? line.push(s[1]) : line.unshift(s[1]);
+            extended = true; break;
+          } else if (d1 < eps) {
+            used[j] = 1;
+            dir ? line.push(s[0]) : line.unshift(s[0]);
+            extended = true; break;
+          }
+        }
+      }
+    }
+    if (line.length >= 2) lines.push(line);
+  }
+  return lines;
+}
 
 maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const parts = params.url.replace('contour-raster://', '').split('/');
   const z = parseInt(parts[0]), x = parseInt(parts[1]), y = parseInt(parts[2]);
 
-  // Clamp DEM fetch zoom
   const demZ = Math.min(z, DEM_MAX_ZOOM);
   const scale = Math.pow(2, z - demZ);
   const demX = Math.floor(x / scale);
@@ -158,133 +208,98 @@ maplibregl.addProtocol('contour-raster', async (params, abortController) => {
   const offY = (y - demY * scale) / scale;
   const span = 1 / scale;
 
-  // Fetch DEM tile
   const demUrl = DEM_URL.replace('{z}', demZ).replace('{x}', demX).replace('{y}', demY);
   const resp = await fetch(demUrl, { signal: abortController.signal });
-  if (!resp.ok) throw new Error(`DEM fetch failed: ${resp.status}`);
+  if (!resp.ok) throw new Error(`DEM ${resp.status}`);
+  const bmp = await createImageBitmap(await resp.blob());
 
-  const blob = await resp.blob();
-  const bmp = await createImageBitmap(blob);
-
-  // Read full DEM tile pixel data
-  const readCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  const rctx = readCanvas.getContext('2d');
+  const rc = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+  const rctx = rc.getContext('2d');
   rctx.drawImage(bmp, 0, 0);
-  const fullData = rctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
+  const fd = rctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
 
-  // Decode terrarium → elevation grid at RENDER_SIZE resolution
+  // Bilinear-interpolated elevation grid
   const gs = RENDER_SIZE + 1;
   const elev = new Float32Array(gs * gs);
+  const dec = (i) => fd[i]*256 + fd[i+1] + fd[i+2]/256 - 32768;
   for (let py = 0; py < gs; py++) {
     for (let px = 0; px < gs; px++) {
-      // Bilinear sample from DEM
-      const fx = offX * TILE_SIZE + (px / RENDER_SIZE) * span * TILE_SIZE;
-      const fy = offY * TILE_SIZE + (py / RENDER_SIZE) * span * TILE_SIZE;
-      const ix = Math.min(Math.floor(fx), TILE_SIZE - 2);
-      const iy = Math.min(Math.floor(fy), TILE_SIZE - 2);
-      const dx = fx - ix, dy = fy - iy;
-      const decode = (i) => fullData[i] * 256 + fullData[i+1] + fullData[i+2] / 256 - 32768;
-      const i00 = (iy * TILE_SIZE + ix) * 4;
-      const i10 = i00 + 4;
-      const i01 = i00 + TILE_SIZE * 4;
-      const i11 = i01 + 4;
-      // Bilinear interpolation for smooth elevation
-      elev[py * gs + px] = decode(i00) * (1-dx)*(1-dy) + decode(i10) * dx*(1-dy)
-                         + decode(i01) * (1-dx)*dy     + decode(i11) * dx*dy;
+      const fx = offX*TILE_SIZE + (px/RENDER_SIZE)*span*TILE_SIZE;
+      const fy = offY*TILE_SIZE + (py/RENDER_SIZE)*span*TILE_SIZE;
+      const ix = Math.min(Math.floor(fx), TILE_SIZE-2);
+      const iy = Math.min(Math.floor(fy), TILE_SIZE-2);
+      const dx = fx-ix, dy = fy-iy;
+      const i00 = (iy*TILE_SIZE+ix)*4;
+      elev[py*gs+px] = dec(i00)*(1-dx)*(1-dy) + dec(i00+4)*dx*(1-dy)
+                      + dec(i00+TILE_SIZE*4)*(1-dx)*dy + dec(i00+TILE_SIZE*4+4)*dx*dy;
     }
   }
 
-  // Get contour intervals for this zoom
-  const intervals = CONTOUR_INTERVALS[Math.min(z, 15)] || CONTOUR_INTERVALS[15];
+  const intervals = CONTOUR_INTERVALS[Math.min(z,15)] || CONTOUR_INTERVALS[15];
   const minor = intervals[0], major = intervals[1];
 
-  // Collect all contour line segments grouped by elevation value
-  const minorSegs = [];
-  const majorSegs = [];
-
+  // Marching squares → collect segments per contour type
+  const minorSegs = [], majorSegs = [];
   for (let py = 0; py < RENDER_SIZE; py++) {
     for (let px = 0; px < RENDER_SIZE; px++) {
-      const e00 = elev[py * gs + px];
-      const e10 = elev[py * gs + px + 1];
-      const e01 = elev[(py + 1) * gs + px];
-      const e11 = elev[(py + 1) * gs + px + 1];
-
-      // Skip water/noise (below 1m)
+      const e00 = elev[py*gs+px], e10 = elev[py*gs+px+1];
+      const e01 = elev[(py+1)*gs+px], e11 = elev[(py+1)*gs+px+1];
       if (e00 < 1 && e10 < 1 && e01 < 1 && e11 < 1) continue;
-
-      const c00 = Math.floor(e00 / minor);
-      const c10 = Math.floor(e10 / minor);
-      const c01 = Math.floor(e01 / minor);
-      const c11 = Math.floor(e11 / minor);
-      if (c00 === c10 && c00 === c01 && c00 === c11) continue;
-
-      // Process each contour level that crosses this cell
-      const minC = Math.min(c00, c10, c01, c11);
-      const maxC = Math.max(c00, c10, c01, c11);
-      for (let c = minC + 1; c <= maxC; c++) {
-        const crossVal = c * minor;
-        if (crossVal <= 0) continue; // skip sea level
-
-        const crossings = [];
-        if ((e00 - crossVal) * (e10 - crossVal) < 0)
-          crossings.push([px + (crossVal - e00) / (e10 - e00), py]);
-        if ((e01 - crossVal) * (e11 - crossVal) < 0)
-          crossings.push([px + (crossVal - e01) / (e11 - e01), py + 1]);
-        if ((e00 - crossVal) * (e01 - crossVal) < 0)
-          crossings.push([px, py + (crossVal - e00) / (e01 - e00)]);
-        if ((e10 - crossVal) * (e11 - crossVal) < 0)
-          crossings.push([px + 1, py + (crossVal - e10) / (e11 - e10)]);
-
-        if (crossings.length >= 2) {
-          const seg = [crossings[0], crossings[1]];
-          (crossVal % major === 0 ? majorSegs : minorSegs).push(seg);
-          if (crossings.length === 4) {
-            (crossVal % major === 0 ? majorSegs : minorSegs).push([crossings[2], crossings[3]]);
-          }
-        }
+      const c00=Math.floor(e00/minor), c10=Math.floor(e10/minor);
+      const c01=Math.floor(e01/minor), c11=Math.floor(e11/minor);
+      if (c00===c10 && c00===c01 && c00===c11) continue;
+      const lo = Math.min(c00,c10,c01,c11), hi = Math.max(c00,c10,c01,c11);
+      for (let c = lo+1; c <= hi; c++) {
+        const cv = c*minor;
+        if (cv <= 0) continue;
+        const cr = [];
+        if ((e00-cv)*(e10-cv)<0) cr.push([px+(cv-e00)/(e10-e00), py]);
+        if ((e01-cv)*(e11-cv)<0) cr.push([px+(cv-e01)/(e11-e01), py+1]);
+        if ((e00-cv)*(e01-cv)<0) cr.push([px, py+(cv-e00)/(e01-e00)]);
+        if ((e10-cv)*(e11-cv)<0) cr.push([px+1, py+(cv-e10)/(e11-e10)]);
+        const dst = cv%major===0 ? majorSegs : minorSegs;
+        if (cr.length>=2) dst.push([cr[0],cr[1]]);
+        if (cr.length===4) dst.push([cr[2],cr[3]]);
       }
     }
   }
 
-  // Render on 512px canvas then scale down to 256 for anti-aliasing
+  // Chain segments into continuous polylines
+  const minorLines = chainSegments(minorSegs);
+  const majorLines = chainSegments(majorSegs);
+
+  // Render
   const out = new OffscreenCanvas(RENDER_SIZE, RENDER_SIZE);
   const ctx = out.getContext('2d');
   ctx.clearRect(0, 0, RENDER_SIZE, RENDER_SIZE);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // Draw minor contours (thin, subtle)
-  if (minorSegs.length > 0) {
-    ctx.strokeStyle = 'rgba(120, 80, 30, 0.35)';
-    ctx.lineWidth = 1.0;
+  // Minor contours
+  ctx.strokeStyle = 'rgba(130, 90, 40, 0.3)';
+  ctx.lineWidth = 1.0;
+  for (const ln of minorLines) {
     ctx.beginPath();
-    for (const s of minorSegs) {
-      ctx.moveTo(s[0][0], s[0][1]);
-      ctx.lineTo(s[1][0], s[1][1]);
-    }
+    ctx.moveTo(ln[0][0], ln[0][1]);
+    for (let i = 1; i < ln.length; i++) ctx.lineTo(ln[i][0], ln[i][1]);
     ctx.stroke();
   }
 
-  // Draw major contours (thicker, darker)
-  if (majorSegs.length > 0) {
-    ctx.strokeStyle = 'rgba(90, 50, 10, 0.6)';
-    ctx.lineWidth = 2.0;
+  // Major contours
+  ctx.strokeStyle = 'rgba(90, 50, 10, 0.55)';
+  ctx.lineWidth = 2.2;
+  for (const ln of majorLines) {
     ctx.beginPath();
-    for (const s of majorSegs) {
-      ctx.moveTo(s[0][0], s[0][1]);
-      ctx.lineTo(s[1][0], s[1][1]);
-    }
+    ctx.moveTo(ln[0][0], ln[0][1]);
+    for (let i = 1; i < ln.length; i++) ctx.lineTo(ln[i][0], ln[i][1]);
     ctx.stroke();
   }
 
-  // Scale down to 256 for final tile (anti-aliasing via downscale)
-  const final = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  const fctx = final.getContext('2d');
-  fctx.drawImage(out, 0, 0, TILE_SIZE, TILE_SIZE);
-
-  const outBlob = await final.convertToBlob({ type: 'image/png' });
-  const buffer = await outBlob.arrayBuffer();
-  return { data: new Uint8Array(buffer) };
+  // Downscale to 256 for anti-aliasing
+  const fin = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+  fin.getContext('2d').drawImage(out, 0, 0, TILE_SIZE, TILE_SIZE);
+  const blob2 = await fin.convertToBlob({ type: 'image/png' });
+  return { data: new Uint8Array(await blob2.arrayBuffer()) };
 });
 
 // ===== Map (base only — contours added after load) =====

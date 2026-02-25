@@ -9,8 +9,7 @@ Interactive elevation map of Seoul for cyclists and hikers. Visualize terrain, c
 ### Terrain
 - **3D terrain** — Exaggerated elevation with MapLibre GL terrain
 - **Contour lines** — Custom marching-squares renderer with Chaikin curve smoothing, rendered per-tile via `addProtocol`
-- **Hypsometric tinting** — GPU `raster-color` shader maps elevation to color gradient
-- **Hillshade overlay** — SRTM-based shadow relief (desktop only)
+- **Hypsometric tinting** — Terrain-based color shading for elevation contrast
 
 ### Cycling
 - **Flat route overlays** — Tanchen, Yangjae-cheon, Han River bike paths
@@ -68,7 +67,6 @@ DEM tile (Terrarium PNG from AWS S3)
 - **[MapLibre GL JS 4.7.1](https://maplibre.org/)** — Map renderer
 - **[CARTO Voyager](https://carto.com/basemaps/)** — Base tiles
 - **[AWS Terrarium DEM](https://s3.amazonaws.com/elevation-tiles-prod/terrarium/)** — Elevation data
-- **[SRTM Hillshading](https://tiles.wmflabs.org/hillshading/)** — Shadow relief tiles
 - **[OpenMapTiles Fonts](https://fonts.openmaptiles.org/)** — Glyphs for text layers
 - **Service Worker** — Offline tile caching, network-first for app shell
 

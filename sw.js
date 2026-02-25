@@ -17,7 +17,7 @@ const TILE_CACHE_MAX_BYTES = 180 * 1024 * 1024;
 const CDN_CACHE_MAX_ENTRIES = 16;
 const CDN_CACHE_MAX_BYTES = 12 * 1024 * 1024;
 
-const TILE_HOST_MATCHERS = ['cartocdn.com', 'wmflabs.org', 'amazonaws.com', 'openfreemap.org'];
+const TILE_HOST_MATCHERS = ['cartocdn.com', 'amazonaws.com', 'openfreemap.org'];
 const cacheStats = { hits: 0, misses: 0 };
 const cacheMeta = new Map();
 let lastStatsBroadcastAt = 0;

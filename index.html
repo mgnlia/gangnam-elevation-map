@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="서울 고도 지도">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%234CAF50' width='192' height='192' rx='20'/%3E%3Ctext x='96' y='120' font-size='80' text-anchor='middle'%3E🏔️%3C/text%3E%3C/svg%3E">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%234CAF50' width='64' height='64' rx='10'/%3E%3Ctext x='32' y='46' font-size='36' text-anchor='middle'%3E🚴%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="icon" type="image/png" href="assets/icons/icon-64.png">
 <title>서울 자전거 고도 지도 🚴</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-4PF67VSQGX"></script>
@@ -311,11 +311,6 @@ const map = new maplibregl.Map({
         tileSize: 256,
         attribution: '© CARTO · © OSM'
       },
-      'hillshade-tiles': {
-        type: 'raster',
-        tiles: ['https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png'],
-        tileSize: 256
-      },
       'terrain-dem': {
         type: 'raster-dem',
         tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
@@ -410,15 +405,6 @@ if (PERF_DEBUG && 'serviceWorker' in navigator) {
   });
 }
 
-// Hillshade only on desktop (redundant with 3D terrain on mobile, saves GPU)
-if (!IS_MOBILE) {
-  map.on('load', () => {
-    if (!map.getLayer('hill-overlay')) {
-      map.addLayer({ id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } }, map.getStyle().layers[1]?.id);
-    }
-  });
-}
-
 // Nav controls
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-left');
 
@@ -497,7 +483,6 @@ async function initContourLayers() {
 }
 
 const dynamicLayerRules = [
-  { id: 'hill-overlay', minZoom: 12, maxPitch: 58 },
   { id: 'elevation-color-overlay', minZoom: 12, maxPitch: 62 },
   { id: 'local-max-label', minZoom: 13.2, maxPitch: 60 },
   { id: 'peak-label', minZoom: 13.5, maxPitch: 60 }

@@ -145,6 +145,7 @@ const SEOUL_CENTER = [126.9780, 37.5665];
 const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const PERF_DEBUG = new URLSearchParams(window.location.search).get('perf') === '1';
 const TERRAIN_EXAGGERATION = IS_MOBILE ? 3.4 : 4.0;
+const FONT_STACK = ['Open Sans Bold'];
 
 const PERF_BUDGETS = Object.freeze({
   startupMsDesktop: 2000,
@@ -522,33 +523,6 @@ const scheduleDynamicVisibility = createRafValueApplier(() => {
 map.on('load', () => {
   scheduleIdleTask(() => initContourLayers(), IS_MOBILE ? 5000 : 3000);
 
-  // --- Elevation color tint (GPU raster-color — terrarium decode on shader) ---
-  // raster-color-mix: [R*65280, G*255, B*1, -32768] → R*256 + G + B/255 - 32768 ≈ elevation(m)
-  map.addSource('elev-color', {
-    type: 'raster',
-    tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-    tileSize: 256,
-    maxzoom: 13
-  });
-  try { map.addLayer({
-    id: 'elev-color-layer', type: 'raster', source: 'elev-color',
-    paint: {
-      'raster-color-mix': [65280, 255, 1, -32768],
-      'raster-color-range': [-10, 350],
-      'raster-color': [
-        'interpolate', ['linear'], ['raster-value'],
-        0.000, 'rgba(180, 220, 160, 0)',
-        0.028, 'rgba(180, 220, 160, 0.52)',
-        0.111, 'rgba(215, 228, 140, 0.52)',
-        0.194, 'rgba(238, 220, 115, 0.54)',
-        0.306, 'rgba(248, 200, 105, 0.56)',
-        0.444, 'rgba(248, 172,  95, 0.58)',
-        0.722, 'rgba(238, 140,  95, 0.60)',
-        1.000, 'rgba(220, 110,  90, 0.62)'
-      ]
-    }
-  }); } catch(e) { console.warn('elev-color-layer skipped:', e.message); }
-
   // --- 3D Buildings (Apple Maps-like tone) ---
   // OpenFreeMap building layer exposes render_height / render_min_height.
   map.addSource('openfreemap-v', {
@@ -625,7 +599,7 @@ map.on('load', () => {
   });
   map.addLayer({ id: 'flat-routes-label', type: 'symbol', source: 'flat-routes',
     layout: { 'symbol-placement': 'line-center', 'text-field': ['concat', '🟢 ', ['get', 'name']],
-      'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold']
+      'text-size': 11, 'text-font': FONT_STACK
     },
     paint: { 'text-color': '#1B5E20', 'text-halo-color': '#fff', 'text-halo-width': 2 }
   });
@@ -662,7 +636,7 @@ map.on('load', () => {
   });
   map.addLayer({ id: 'caution-label', type: 'symbol', source: 'caution-zones',
     layout: { 'text-field': ['concat', ['case',['get','steep'],'🔴','🟠'], ' ', ['get','name']],
-      'text-size': 11, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold']
+      'text-size': 11, 'text-font': FONT_STACK
     },
     paint: { 'text-color': ['case',['get','steep'],'#C62828','#E65100'], 'text-halo-color': '#fff', 'text-halo-width': 2 }
   });
@@ -874,7 +848,7 @@ map.on('load', () => {
     layout: {
       'text-field': ['get', 'name'],
       'text-size': 15,
-      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-font': FONT_STACK,
       'text-offset': [0, -1.2],
       'text-anchor': 'bottom',
       'text-allow-overlap': false,
@@ -914,7 +888,7 @@ map.on('load', () => {
     minzoom: 13,
     layout: {
       'text-field': ['concat', ['get','dir'], ' ', ['get','label']],
-      'text-size': 14, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-size': 14, 'text-font': FONT_STACK,
       'text-allow-overlap': false
     },
     paint: {
@@ -992,7 +966,7 @@ map.on('load', () => {
       'symbol-placement': 'line',
       'text-field': '›',
       'text-size': 16,
-      'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-font': FONT_STACK,
       'text-keep-upright': false,
       'symbol-spacing': 80,
       'text-allow-overlap': false,
@@ -1012,7 +986,7 @@ map.on('load', () => {
       'symbol-placement': 'line',
       'text-field': '››',
       'text-size': 20,
-      'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-font': FONT_STACK,
       'text-keep-upright': false,
       'symbol-spacing': 60,
       'text-allow-overlap': false,
@@ -1032,7 +1006,7 @@ map.on('load', () => {
       'symbol-placement': 'line',
       'text-field': '›››',
       'text-size': 24,
-      'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-font': FONT_STACK,
       'text-keep-upright': false,
       'symbol-spacing': 45,
       'text-allow-overlap': false,
@@ -1053,7 +1027,7 @@ map.on('load', () => {
       'symbol-placement': 'line-center',
       'text-field': ['get', 'name'],
       'text-size': 10,
-      'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+      'text-font': FONT_STACK,
       'text-offset': [0, -1.2]
     },
     paint: {
@@ -1120,7 +1094,7 @@ map.on('load', () => {
     layout: {
       'text-field': ['concat', ['get','elev'], 'm'],
       'text-size': 10,
-      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-font': FONT_STACK,
       'text-allow-overlap': false,
       'text-offset': [0, -0.8]
     },
@@ -1148,7 +1122,7 @@ map.on('load', () => {
     features: peaks.map(p => ({ type:'Feature', properties:{name:p.n}, geometry:{type:'Point',coordinates:[p.lo,p.la]} }))
   }});
   map.addLayer({ id: 'peak-label', type: 'symbol', source: 'peaks',
-    layout: { 'text-field': ['get','name'], 'text-size': 12, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'], 'text-allow-overlap': true },
+    layout: { 'text-field': ['get','name'], 'text-size': 12, 'text-font': FONT_STACK, 'text-allow-overlap': true },
     paint: { 'text-color': '#C62828', 'text-halo-color': '#fff', 'text-halo-width': 2 }
   });
   };

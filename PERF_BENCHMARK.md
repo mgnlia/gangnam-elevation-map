@@ -50,3 +50,16 @@ A run is considered pass only if all three primary budgets pass:
 - `startupMs`
 - `contourTileAvgMs`
 - `panFpsAvg`
+
+## Desktop Gain Benchmark
+
+Run A/B desktop benchmark against `main` and compute percentage gain:
+
+```bash
+./scripts/desktop-gain-benchmark.sh 5
+```
+
+Outputs are saved under:
+
+- `desktop-gain-reports/<timestamp>/desktop-gain-report.md`
+- `desktop-gain-reports/<timestamp>/summary.tsv`

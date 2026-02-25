@@ -139,10 +139,161 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sa
 <div class="pitch-hint" id="pitchHint">🤏 두 손가락으로 회전 &amp; 기울이기</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js"></script>
 <script>
 const DEFAULT_LOC = [127.0448, 37.5104]; // 선정릉역 [lng, lat]
 const SEOUL_CENTER = [126.9780, 37.5665];
+const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const PERF_DEBUG = new URLSearchParams(window.location.search).get('perf') === '1';
+const TERRAIN_EXAGGERATION = IS_MOBILE ? 3.4 : 4.0;
+
+const PERF_BUDGETS = Object.freeze({
+  startupMsDesktop: 2000,
+  startupMsMobile: 3500,
+  contourTileMsDesktop: 40,
+  contourTileMsMobile: 90,
+  panFpsDesktop: 50,
+  panFpsMobile: 35
+});
+
+function detectDeviceProfile() {
+  const mem = navigator.deviceMemory || (IS_MOBILE ? 2 : 4);
+  const cores = navigator.hardwareConcurrency || 4;
+  if (IS_MOBILE && (mem <= 3 || cores <= 4)) return 'low';
+  if (mem >= 8 && cores >= 8 && !IS_MOBILE) return 'high';
+  return 'medium';
+}
+
+const DEVICE_PROFILE = detectDeviceProfile();
+const CONTOUR_CONFIG_BY_PROFILE = {
+  low: {
+    overzoom: 0,
+    thresholds: { 11: [100], 12: [50], 13: [20, 100], 14: [20, 100], 15: [10, 50] }
+  },
+  medium: {
+    overzoom: 1,
+    thresholds: { 11: [50], 12: [20, 100], 13: [10, 50], 14: [10, 50], 15: [5, 20] }
+  },
+  high: {
+    overzoom: 1,
+    thresholds: { 11: [50], 12: [20, 100], 13: [10, 50], 14: [5, 20], 15: [5, 10, 20] }
+  }
+};
+const CONTOUR_CONFIG = CONTOUR_CONFIG_BY_PROFILE[DEVICE_PROFILE];
+
+const PERF_METRICS = {
+  navStart: performance.timeOrigin || Date.now(),
+  firstInteractionLatencyMs: null,
+  startupMs: null,
+  contourTileSampleCount: 0,
+  contourTileTotalMs: 0,
+  contourTileAvgMs: null,
+  panSampleCount: 0,
+  panFpsAvg: null,
+  cacheHits: 0,
+  cacheMisses: 0,
+  cacheHitRate: null,
+  memoryUsedMb: null,
+  lastReportReason: null
+};
+
+window.__seoulMapPerf = {
+  enabled: PERF_DEBUG,
+  budgets: PERF_BUDGETS,
+  deviceProfile: DEVICE_PROFILE,
+  metrics: PERF_METRICS
+};
+
+const contourTileStarts = new Map();
+function tileCoordKey(coord) {
+  if (!coord || !coord.canonical) return null;
+  const c = coord.canonical;
+  return `${c.z}/${c.x}/${c.y}`;
+}
+
+function getHeapUsedMb() {
+  const heap = performance.memory?.usedJSHeapSize;
+  return heap ? +(heap / (1024 * 1024)).toFixed(1) : null;
+}
+
+function summarizeBudgets() {
+  const startupBudget = IS_MOBILE ? PERF_BUDGETS.startupMsMobile : PERF_BUDGETS.startupMsDesktop;
+  const contourBudget = IS_MOBILE ? PERF_BUDGETS.contourTileMsMobile : PERF_BUDGETS.contourTileMsDesktop;
+  const fpsBudget = IS_MOBILE ? PERF_BUDGETS.panFpsMobile : PERF_BUDGETS.panFpsDesktop;
+  return {
+    startup: PERF_METRICS.startupMs == null ? 'pending' : (PERF_METRICS.startupMs <= startupBudget ? 'pass' : 'fail'),
+    contour: PERF_METRICS.contourTileAvgMs == null ? 'pending' : (PERF_METRICS.contourTileAvgMs <= contourBudget ? 'pass' : 'fail'),
+    fps: PERF_METRICS.panFpsAvg == null ? 'pending' : (PERF_METRICS.panFpsAvg >= fpsBudget ? 'pass' : 'fail')
+  };
+}
+
+function reportPerf(reason = 'manual') {
+  PERF_METRICS.memoryUsedMb = getHeapUsedMb();
+  PERF_METRICS.lastReportReason = reason;
+  const budgetStatus = summarizeBudgets();
+  console.table({
+    profile: DEVICE_PROFILE,
+    startupMs: PERF_METRICS.startupMs,
+    firstInteractionLatencyMs: PERF_METRICS.firstInteractionLatencyMs,
+    contourTileAvgMs: PERF_METRICS.contourTileAvgMs,
+    panFpsAvg: PERF_METRICS.panFpsAvg,
+    cacheHitRate: PERF_METRICS.cacheHitRate,
+    memoryUsedMb: PERF_METRICS.memoryUsedMb,
+    budgetStartup: budgetStatus.startup,
+    budgetContour: budgetStatus.contour,
+    budgetFps: budgetStatus.fps,
+    reportReason: reason
+  });
+}
+
+window.__seoulMapPerf.report = reportPerf;
+if (PERF_DEBUG) {
+  setInterval(() => reportPerf('interval'), 45000);
+}
+
+function scheduleIdleTask(fn, timeout = 2500) {
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(fn, { timeout });
+    return;
+  }
+  setTimeout(fn, 0);
+}
+
+function createRafValueApplier(applyValue) {
+  let rafId = null;
+  let pendingValue = null;
+  return (value) => {
+    pendingValue = value;
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      applyValue(pendingValue);
+    });
+  };
+}
+
+function setLayerVisibility(mapInstance, layerIds, visible) {
+  const value = visible ? 'visible' : 'none';
+  layerIds.forEach((layerId) => {
+    if (mapInstance.getLayer(layerId)) {
+      mapInstance.setLayoutProperty(layerId, 'visibility', value);
+    }
+  });
+}
+
+let contourLibPromise = null;
+function loadContourLibrary() {
+  if (window.mlcontour) return Promise.resolve(window.mlcontour);
+  if (contourLibPromise) return contourLibPromise;
+  contourLibPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/maplibre-contour@0.0.7/dist/index.min.js';
+    script.async = true;
+    script.onload = () => resolve(window.mlcontour);
+    script.onerror = () => reject(new Error('Failed to load maplibre-contour'));
+    document.head.appendChild(script);
+  });
+  return contourLibPromise;
+}
 
 // ===== Map (base only — contours added after load) =====
 const map = new maplibregl.Map({
@@ -153,7 +304,7 @@ const map = new maplibregl.Map({
     sources: {
       'carto': {
         type: 'raster',
-        tiles: [/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+        tiles: [IS_MOBILE
           ? 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
           : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
         tileSize: 256,
@@ -174,20 +325,92 @@ const map = new maplibregl.Map({
     layers: [
       { id: 'base', type: 'raster', source: 'carto' }
     ],
-    terrain: { source: 'terrain-dem', exaggeration: 4.0 }
+    terrain: { source: 'terrain-dem', exaggeration: TERRAIN_EXAGGERATION }
   },
   center: DEFAULT_LOC,
   zoom: 14,
   pitch: 40,
   bearing: 0,
-  maxPitch: 70,
+  maxPitch: IS_MOBILE ? 65 : 70,
   touchPitch: true,
   dragRotate: true,
-  touchZoomRotate: true
+  touchZoomRotate: true,
+  refreshExpiredTiles: false,
+  fadeDuration: IS_MOBILE ? 120 : 250
 });
 
+map.once('load', () => {
+  PERF_METRICS.startupMs = Math.round(performance.now());
+  if (PERF_DEBUG) reportPerf('map-load');
+});
+
+let firstInteractionCaptured = false;
+const captureFirstInteraction = () => {
+  if (firstInteractionCaptured) return;
+  firstInteractionCaptured = true;
+  PERF_METRICS.firstInteractionLatencyMs = Math.round(performance.now());
+};
+['pointerdown', 'keydown', 'touchstart'].forEach((evtName) => {
+  window.addEventListener(evtName, captureFirstInteraction, { passive: true, once: true });
+});
+
+if (PERF_DEBUG) {
+  let panFrameCount = 0;
+  let panStartAt = null;
+  map.on('movestart', () => {
+    panFrameCount = 0;
+    panStartAt = performance.now();
+  });
+  map.on('render', () => {
+    if (!panStartAt || !map.isMoving()) return;
+    panFrameCount += 1;
+  });
+  map.on('moveend', () => {
+    if (!panStartAt) return;
+    const durationMs = performance.now() - panStartAt;
+    panStartAt = null;
+    if (durationMs < 300 || panFrameCount === 0) return;
+    const fps = +(panFrameCount / (durationMs / 1000)).toFixed(1);
+    PERF_METRICS.panSampleCount += 1;
+    PERF_METRICS.panFpsAvg = PERF_METRICS.panFpsAvg == null
+      ? fps
+      : +(((PERF_METRICS.panFpsAvg * (PERF_METRICS.panSampleCount - 1)) + fps) / PERF_METRICS.panSampleCount).toFixed(1);
+  });
+
+  map.on('dataloading', (event) => {
+    if (event.sourceId !== 'contour-source') return;
+    const key = tileCoordKey(event.coord);
+    if (!key) return;
+    contourTileStarts.set(key, performance.now());
+  });
+  map.on('sourcedata', (event) => {
+    if (event.sourceId !== 'contour-source') return;
+    const key = tileCoordKey(event.coord);
+    if (!key) return;
+    const startedAt = contourTileStarts.get(key);
+    if (!startedAt) return;
+    contourTileStarts.delete(key);
+    const elapsed = performance.now() - startedAt;
+    PERF_METRICS.contourTileSampleCount += 1;
+    PERF_METRICS.contourTileTotalMs += elapsed;
+    PERF_METRICS.contourTileAvgMs = +(
+      PERF_METRICS.contourTileTotalMs / PERF_METRICS.contourTileSampleCount
+    ).toFixed(1);
+  });
+}
+
+if (PERF_DEBUG && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type !== 'sw-cache-stats') return;
+    PERF_METRICS.cacheHits = event.data.hits || 0;
+    PERF_METRICS.cacheMisses = event.data.misses || 0;
+    const total = PERF_METRICS.cacheHits + PERF_METRICS.cacheMisses;
+    PERF_METRICS.cacheHitRate = total ? +((PERF_METRICS.cacheHits / total) * 100).toFixed(1) : null;
+  });
+}
+
 // Hillshade only on desktop (redundant with 3D terrain on mobile, saves GPU)
-if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+if (!IS_MOBILE) {
   map.on('load', () => {
     if (!map.getLayer('hill-overlay')) {
       map.addLayer({ id: 'hill-overlay', type: 'raster', source: 'hillshade-tiles', paint: { 'raster-opacity': 0.5 } }, map.getStyle().layers[1]?.id);
@@ -199,8 +422,7 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-left');
 
 // 기기별 조작법 힌트 텍스트 설정
-const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-const controlHintText = isMobile
+const controlHintText = IS_MOBILE
   ? '🤏 두 손가락 회전 / 기울이기'
   : '⌨️ WASD: 이동 &nbsp;|&nbsp; Space/Shift: 상승·하강 &nbsp;|&nbsp; 우클릭: 회전';
 
@@ -215,8 +437,91 @@ setTimeout(() => {
   setTimeout(() => h.classList.remove('show'), 4000);
 }, 2000);
 
+let contourInitialized = false;
+let contourInitInFlight = false;
+async function initContourLayers() {
+  if (contourInitialized || contourInitInFlight) return;
+  contourInitInFlight = true;
+  const contourInitStartedAt = performance.now();
+  try {
+    const mlcontour = await loadContourLibrary();
+    if (!mlcontour?.DemSource) throw new Error('maplibre-contour unavailable');
+    const demSource = new mlcontour.DemSource({
+      url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+      encoding: 'terrarium',
+      maxzoom: 13,
+      worker: true
+    });
+    demSource.setupMaplibre(maplibregl);
+
+    map.addSource('contour-source', {
+      type: 'vector',
+      tiles: [demSource.contourProtocolUrl({
+        multiplier: 1,
+        overzoom: CONTOUR_CONFIG.overzoom,
+        thresholds: CONTOUR_CONFIG.thresholds,
+        elevationKey: 'ele',
+        levelKey: 'level',
+        contourLayer: 'contours'
+      })],
+      minzoom: 11,
+      maxzoom: 15
+    });
+    map.addLayer({
+      id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 0],
+      minzoom: 11,
+      paint: { 'line-color': 'rgba(56, 142, 60, 0.5)', 'line-width': 1.2 }
+    });
+    map.addLayer({
+      id: 'contour-lines-major', type: 'line', source: 'contour-source', 'source-layer': 'contours',
+      filter: ['==', ['get','level'], 1],
+      minzoom: 12,
+      paint: { 'line-color': 'rgba(46, 125, 50, 0.8)', 'line-width': 2.5 }
+    });
+    contourInitialized = true;
+    const contourVisible = document.getElementById('chkContour')?.checked ?? true;
+    setLayerVisibility(map, ['contour-lines', 'contour-lines-major'], contourVisible);
+    const sliderValue = Number(document.getElementById('contourOpacity')?.value ?? 75) / 100;
+    if (map.getLayer('contour-lines')) map.setPaintProperty('contour-lines', 'line-opacity', sliderValue);
+    if (map.getLayer('contour-lines-major')) map.setPaintProperty('contour-lines-major', 'line-opacity', sliderValue);
+    if (PERF_DEBUG) {
+      PERF_METRICS.contourInitMs = +(performance.now() - contourInitStartedAt).toFixed(1);
+    }
+  } catch (err) {
+    console.warn('Contour init failed:', err);
+  } finally {
+    contourInitInFlight = false;
+  }
+}
+
+const dynamicLayerRules = [
+  { id: 'hill-overlay', minZoom: 12, maxPitch: 58 },
+  { id: 'elevation-color-overlay', minZoom: 12, maxPitch: 62 },
+  { id: 'local-max-label', minZoom: 13.2, maxPitch: 60 },
+  { id: 'peak-label', minZoom: 13.5, maxPitch: 60 }
+];
+const dynamicLayerVisibilityState = new Map();
+const scheduleDynamicVisibility = createRafValueApplier(() => {
+  const zoom = map.getZoom();
+  const pitch = map.getPitch();
+  dynamicLayerRules.forEach((rule) => {
+    if (!map.getLayer(rule.id)) return;
+    const shouldBeVisible = zoom >= rule.minZoom && pitch <= rule.maxPitch;
+    const previous = dynamicLayerVisibilityState.get(rule.id);
+    if (previous === shouldBeVisible) return;
+    dynamicLayerVisibilityState.set(rule.id, shouldBeVisible);
+    setLayerVisibility(map, [rule.id], shouldBeVisible);
+  });
+});
+['moveend', 'zoomend', 'pitchend', 'rotateend'].forEach((evtName) => {
+  map.on(evtName, () => scheduleDynamicVisibility(0));
+});
+
 // ===== GeoJSON sources for overlays =====
 map.on('load', () => {
+  scheduleIdleTask(() => initContourLayers(), IS_MOBILE ? 5000 : 3000);
+
   // --- Elevation color tint (GPU raster-color — terrarium decode on shader) ---
   // raster-color-mix: [R*65280, G*255, B*1, -32768] → R*256 + G + B/255 - 32768 ≈ elevation(m)
   map.addSource('elev-color', {
@@ -286,41 +591,6 @@ map.on('load', () => {
     }
   });
 
-  // --- Contour lines (maplibre-contour vector) ---
-  try {
-    const demSource = new mlcontour.DemSource({
-      url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-      encoding: 'terrarium',
-      maxzoom: 13,
-      worker: true
-    });
-    demSource.setupMaplibre(maplibregl);
-
-    map.addSource('contour-source', {
-      type: 'vector',
-      tiles: [demSource.contourProtocolUrl({
-        multiplier: 1,
-        overzoom: 1,
-        thresholds: { 11: [50], 12: [20,100], 13: [10,50], 14: [10,50], 15: [5,20] },
-        elevationKey: 'ele',
-        levelKey: 'level',
-        contourLayer: 'contours'
-      })],
-      maxzoom: 15
-    });
-    map.addLayer({
-      id: 'contour-lines', type: 'line', source: 'contour-source', 'source-layer': 'contours',
-      filter: ['==', ['get','level'], 0],
-      paint: { 'line-color': 'rgba(56, 142, 60, 0.5)', 'line-width': 1.2 }
-    });
-    map.addLayer({
-      id: 'contour-lines-major', type: 'line', source: 'contour-source', 'source-layer': 'contours',
-      filter: ['==', ['get','level'], 1],
-      paint: { 'line-color': 'rgba(46, 125, 50, 0.8)', 'line-width': 2.5 }
-    });
-    // Keep contour rendering line-only for stability and continuity.
-  } catch(err) { console.warn('Contour init failed:', err); }
-
   // Hypsometric tint - elevation coloring using hillshade
   map.addLayer({
     id: 'elevation-color-overlay',
@@ -330,11 +600,12 @@ map.on('load', () => {
       'hillshade-shadow-color': 'rgba(255,200,100,0.2)',
       'hillshade-highlight-color': 'rgba(255,100,100,0.15)',
       'hillshade-accent-color': 'rgba(200,50,50,0.25)',
-      'hillshade-exaggeration': 0.8
+      'hillshade-exaggeration': DEVICE_PROFILE === 'low' ? 0.55 : 0.8
     },
     layout: { 'visibility': 'visible' }
-  }, 'contour-lines');
+  });
 
+  const initSecondaryOverlays = () => {
   // --- Flat routes ---
   const flatRoutes = [
     { name: '탄천 자전거길', coords: [[127.0946,37.5145],[127.0920,37.5100],[127.0870,37.5040],[127.0810,37.4970],[127.0770,37.4910],[127.0730,37.4850],[127.0680,37.4780],[127.0640,37.4720],[127.0610,37.4665]] },
@@ -880,9 +1151,32 @@ map.on('load', () => {
     layout: { 'text-field': ['get','name'], 'text-size': 12, 'text-font': ['Open Sans Bold','Arial Unicode MS Bold'], 'text-allow-overlap': true },
     paint: { 'text-color': '#C62828', 'text-halo-color': '#fff', 'text-halo-width': 2 }
   });
+  };
+
+  const applySecondaryOverlayState = () => {
+    const routeVisible = document.getElementById('chkRoute')?.checked ?? true;
+    const stationVisible = document.getElementById('chkStation')?.checked ?? true;
+    const slopeVisible = document.getElementById('chkSlope')?.checked ?? true;
+    setLayerVisibility(map, ['flat-routes-line', 'flat-routes-label', 'caution-fill', 'caution-border', 'caution-label'], routeVisible);
+    setLayerVisibility(map, ['station-dot', 'station-labels'], stationVisible);
+    setLayerVisibility(map, ['slope-arrow', 'road-slope-line', 'road-slope-arrows-g1', 'road-slope-arrows-g2', 'road-slope-arrows-g3', 'road-slope-labels'], slopeVisible);
+    scheduleDynamicVisibility(0);
+  };
+
+  if (IS_MOBILE) {
+    // Delay heavy overlay/source setup on mobile to reduce first-load main-thread work.
+    scheduleIdleTask(() => {
+      initSecondaryOverlays();
+      applySecondaryOverlayState();
+    }, 8000);
+  } else {
+    initSecondaryOverlays();
+    applySecondaryOverlayState();
+  }
 
   // --- Default location marker ---
   addLocMarker(DEFAULT_LOC);
+  scheduleDynamicVisibility(0);
 });
 
 // ===== Location marker =====
@@ -918,7 +1212,7 @@ let is3d = true;
 document.getElementById('btn3dToggle').addEventListener('click', () => {
   is3d = !is3d;
   if (is3d) {
-    map.setTerrain({ source: 'terrain-dem', exaggeration: 4.0 });
+    map.setTerrain({ source: 'terrain-dem', exaggeration: TERRAIN_EXAGGERATION });
     map.easeTo({ pitch: 40, duration: 500 });
     document.getElementById('btn3dToggle').textContent = '🏔️';
   } else {
@@ -930,7 +1224,7 @@ document.getElementById('btn3dToggle').addEventListener('click', () => {
 
 document.getElementById('chk3d').addEventListener('change', e => {
   if (e.target.checked) {
-    map.setTerrain({ source: 'terrain-dem', exaggeration: 4.0 });
+    map.setTerrain({ source: 'terrain-dem', exaggeration: TERRAIN_EXAGGERATION });
   } else {
     map.setTerrain(null);
     map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
@@ -939,37 +1233,30 @@ document.getElementById('chk3d').addEventListener('change', e => {
 
 // 3D buildings toggle (default hidden)
 document.getElementById('chkBuildings')?.addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  try { ['buildings-3d', 'buildings-3d-outline'].forEach(l => map.setLayoutProperty(l, 'visibility', v)); } catch(err) {}
+  setLayerVisibility(map, ['buildings-3d', 'buildings-3d-outline'], e.target.checked);
 });
 
 // Contour line visibility toggle
 document.getElementById('chkContour')?.addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  try { ['contour-lines','contour-lines-major','contour-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err) {}
+  setLayerVisibility(map, ['contour-lines', 'contour-lines-major'], e.target.checked);
 });
 
+const applyContourOpacity = createRafValueApplier((opacity) => {
+  if (map.getLayer('contour-lines')) map.setPaintProperty('contour-lines', 'line-opacity', opacity);
+  if (map.getLayer('contour-lines-major')) map.setPaintProperty('contour-lines-major', 'line-opacity', opacity);
+});
 document.getElementById('contourOpacity').addEventListener('input', e => {
-  const v = e.target.value / 100;
-  try {
-    map.setPaintProperty('contour-lines', 'line-opacity', v);
-    map.setPaintProperty('contour-lines-major', 'line-opacity', v);
-    map.setPaintProperty('contour-labels', 'text-opacity', v);
-  } catch(err) {}
+  applyContourOpacity(Number(e.target.value) / 100);
 });
 
 document.getElementById('chkStation').addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  try { map.setLayoutProperty('station-dot', 'visibility', v); } catch(err) {}
-  try { map.setLayoutProperty('station-labels', 'visibility', v); } catch(err) {}
+  setLayerVisibility(map, ['station-dot', 'station-labels'], e.target.checked);
 });
 document.getElementById('chkRoute').addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  ['flat-routes-line','flat-routes-label','caution-fill','caution-border','caution-label'].forEach(l => map.setLayoutProperty(l,'visibility',v));
+  setLayerVisibility(map, ['flat-routes-line', 'flat-routes-label', 'caution-fill', 'caution-border', 'caution-label'], e.target.checked);
 });
 document.getElementById('chkSlope').addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  try { ['slope-arrow','road-slope-line','road-slope-arrows-g1','road-slope-arrows-g2','road-slope-arrows-g3','road-slope-labels'].forEach(l => map.setLayoutProperty(l,'visibility',v)); } catch(err){}
+  setLayerVisibility(map, ['slope-arrow', 'road-slope-line', 'road-slope-arrows-g1', 'road-slope-arrows-g2', 'road-slope-arrows-g3', 'road-slope-labels'], e.target.checked);
 });
 
 // ===== My Location =====
@@ -1001,8 +1288,10 @@ if (navigator.geolocation) {
 
 // ===== Middle mouse button: rotate + tilt (desktop only) =====
 // 좌우 드래그 → 회전(bearing), 상하 드래그 → 기울기(pitch)
-if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+if (!IS_MOBILE) {
   let midDragging = false, midLastX = 0, midLastY = 0;
+  let midAccumDx = 0, midAccumDy = 0;
+  let midMoveRaf = null;
 
   document.getElementById('map').addEventListener('mousedown', e => {
     if (e.button === 1) {
@@ -1016,18 +1305,31 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
 
   document.addEventListener('mousemove', e => {
     if (!midDragging) return;
-    const dx = e.clientX - midLastX;
-    const dy = e.clientY - midLastY;
-    const newBearing = map.getBearing() + dx * 0.4;
-    const newPitch   = Math.max(0, Math.min(70, map.getPitch() - dy * 0.3));
-    map.jumpTo({ bearing: newBearing, pitch: newPitch });
+    midAccumDx += e.clientX - midLastX;
+    midAccumDy += e.clientY - midLastY;
     midLastX = e.clientX;
     midLastY = e.clientY;
+    if (midMoveRaf !== null) return;
+    midMoveRaf = requestAnimationFrame(() => {
+      midMoveRaf = null;
+      const newBearing = map.getBearing() + midAccumDx * 0.4;
+      const maxPitch = typeof map.getMaxPitch === 'function' ? map.getMaxPitch() : 70;
+      const newPitch = Math.max(0, Math.min(maxPitch, map.getPitch() - midAccumDy * 0.3));
+      midAccumDx = 0;
+      midAccumDy = 0;
+      map.jumpTo({ bearing: newBearing, pitch: newPitch });
+    });
   });
 
   document.addEventListener('mouseup', e => {
     if (e.button === 1) {
       midDragging = false;
+      midAccumDx = 0;
+      midAccumDy = 0;
+      if (midMoveRaf !== null) {
+        cancelAnimationFrame(midMoveRaf);
+        midMoveRaf = null;
+      }
       document.getElementById('map').style.cursor = '';
     }
   });
@@ -1100,9 +1402,18 @@ if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
 // Register Service Worker for offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
+    scheduleIdleTask(() => {
+      navigator.serviceWorker.register('sw.js')
       .then((registration) => {
         console.log('[SW] Registered:', registration.scope);
+        if (PERF_DEBUG) {
+          const requestCacheStats = () => {
+            const worker = navigator.serviceWorker.controller || registration.active;
+            worker?.postMessage({ type: 'sw-report-cache-stats' });
+          };
+          requestCacheStats();
+          setInterval(requestCacheStats, 20000);
+        }
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           newWorker.addEventListener('statechange', () => {
@@ -1115,6 +1426,7 @@ if ('serviceWorker' in navigator) {
       .catch((error) => {
         console.log('[SW] Registration failed:', error);
       });
+    }, IS_MOBILE ? 4500 : 1500);
   });
 }
 
@@ -1128,7 +1440,6 @@ function updateOnlineStatus() {
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
-</script>
 </script>
 </body>
 </html>

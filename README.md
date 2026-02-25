@@ -82,6 +82,26 @@ open index.html
 python3 -m http.server 8080
 ```
 
+## Performance Profiling
+
+```bash
+# Run Lighthouse desktop + mobile perf snapshots
+./scripts/perf-benchmark.sh http://127.0.0.1:8080
+```
+
+Runtime perf telemetry is exposed in-browser:
+
+```js
+window.__seoulMapPerf.metrics
+window.__seoulMapPerf.report()
+```
+
+Enable full runtime perf instrumentation with `?perf=1`:
+
+```text
+http://127.0.0.1:8080/?perf=1
+```
+
 ## Controls
 
 | Input | Desktop | Mobile |

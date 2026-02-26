@@ -8,8 +8,9 @@ Interactive elevation map of Seoul for cyclists and hikers. Visualize terrain, c
 
 ### Terrain
 - **3D terrain** — Exaggerated elevation with MapLibre GL terrain
-- **Contour lines** — Custom marching-squares renderer with Chaikin curve smoothing, rendered per-tile via `addProtocol`
-- **Hypsometric tinting** — Terrain-based color shading for elevation contrast
+- **3D buildings** — OpenFreeMap extruded building footprints (toggleable, hidden by default)
+- **Contour lines** — Vector contour lines via `maplibre-contour`, with minor/major intervals and elevation labels
+- **Hypsometric tinting** — GPU-side `raster-color` shader for elevation-based color gradient
 
 ### Cycling
 - **Flat route overlays** — Tanchen, Yangjae-cheon, Han River bike paths
@@ -17,63 +18,61 @@ Interactive elevation map of Seoul for cyclists and hikers. Visualize terrain, c
 - **Caution zones** — Highlighted steep areas (Daemo-san, Guryong-san, etc.)
 
 ### Transit
-- **175 metro stations** — All Seoul lines (1–9, Sinbundang, Bundang, Gyeongui) with official line colors, rendered as GPU symbol layers
+- **175 metro stations** — Lines 1–9, Sinbundang, Bundang, Gyeongui — with official line colors, rendered as GPU symbol layers
 
 ### Controls
-- **Desktop** — WASD panning (IME-safe `e.code`), right-click rotate, middle-mouse rotate+tilt
+- **Desktop** — WASD panning (IME-safe `e.code`), Space/Shift to ascend/descend zoom, right-click drag to rotate, middle-mouse drag to rotate + tilt
 - **Mobile** — Touch gestures, GPS location button
-- **Layer panel** — Toggle terrain, contours, stations, routes, slope arrows
+- **Layer panel** — Toggle terrain, 3D buildings, contours, stations, routes, slope arrows
 - **Contour opacity slider** — Adjustable contour line intensity
+
+## Stack
+
+| Library | Purpose |
+|---|---|
+| [MapLibre GL JS 4.7.1](https://maplibre.org/) | Map renderer + GPU terrain/tiling |
+| [maplibre-contour 0.0.7](https://github.com/onthegomap/maplibre-contour) | Vector contour line generation from DEM |
+| [CARTO Voyager](https://carto.com/basemaps/) | Base map tiles |
+| [OpenFreeMap](https://openfreemap.org/) | 3D building footprints |
+| [AWS Terrarium DEM](https://s3.amazonaws.com/elevation-tiles-prod/terrarium/) | Elevation tiles (Terrarium encoding) |
+| [OpenMapTiles Fonts](https://fonts.openmaptiles.org/) | Glyphs for contour labels and station names |
+| Service Worker | Offline tile caching, network-first for app shell |
+| GA4 | Anonymous usage analytics |
 
 ## Architecture
 
 Single `index.html` (~1100 lines). No build step, no bundler.
 
-### Contour Rendering Pipeline
+### Contour Rendering
 
-Contour lines are generated entirely client-side with zero external libraries:
+Contour lines are vector tiles generated client-side by `maplibre-contour`:
 
 ```
-DEM tile (Terrarium PNG from AWS S3)
-  → fetch + decode → Float32 elevation grid
-  → bilinear interpolation → 512px grid (z13+) or 256px (z10-12)
-  → Gaussian blur (separable 1D, 1 pass)
-  → marching squares → line segments
-  → spatial-hash chaining → continuous polylines
-  → Chaikin corner-cutting → smooth curves
-  → Canvas 2D render → WebP encode
-  → MapLibre raster tile via addProtocol('contour-raster')
+DEM tiles (Terrarium PNG, AWS S3)
+  → DemSource (maplibre-contour, maxzoom 13, worker thread)
+  → Vector MVT via custom protocol handler
+  → MapLibre symbol/line layers (contour-lines, contour-lines-major, contour-labels)
 ```
 
-### Performance Optimizations
+Zoom-dependent intervals:
 
-| Optimization | Impact |
-|---|---|
-| DEM LRU cache (96 tiles, pre-decoded Float32) | Avoid re-fetch + re-decode |
-| Rendered tile LRU cache (128 tiles) | Pan back = 0ms |
-| Flat tile early exit (DEM min/max check) | Skip processing entirely |
-| Inflight request dedup | One fetch per DEM tile |
-| Separable Gaussian blur | 4.5× faster than 2D kernel |
-| Integer spatial hash keys | No string GC pressure |
-| Flat Float32Array polylines | Half the memory vs `[x,y][]` |
-| Batched Canvas paths | 1 `stroke()` per style vs per-line |
-| Adaptive resolution | 256px at z10-12, 512px at z13+ |
-| WebP output (quality 0.8) | ~3× smaller than PNG |
-| Reusable OffscreenCanvas | No allocation per tile |
-| `ImageBitmap.close()` | Explicit GPU memory release |
+| Zoom | Minor | Major |
+|------|-------|-------|
+| 11 | — | 50 m |
+| 12 | 20 m | 100 m |
+| 13–15 | 10 m | 50 m |
 
-### Stack
+### Performance Notes
 
-- **[MapLibre GL JS 4.7.1](https://maplibre.org/)** — Map renderer
-- **[CARTO Voyager](https://carto.com/basemaps/)** — Base tiles
-- **[AWS Terrarium DEM](https://s3.amazonaws.com/elevation-tiles-prod/terrarium/)** — Elevation data
-- **[OpenMapTiles Fonts](https://fonts.openmaptiles.org/)** — Glyphs for text layers
-- **Service Worker** — Offline tile caching, network-first for app shell
+- Protocol handler registered before `map = new Map(...)` (required for MapLibre GL 4.x)
+- Terrain DEM source added before `elev-color` source in `map.on('load')` to avoid silent protocol failures
+- `raster-color` / `raster-color-range` wrapped in `try/catch` (MapLibre GL 4.7.1 validation throws but is non-fatal)
+- Service Worker: `CACHE_NAME = 'seoul-elevation-map-v13'`, network-first for `index.html`
 
 ## Usage
 
 ```bash
-# Just open it
+# Open directly in browser
 open index.html
 
 # Or serve locally
@@ -81,11 +80,6 @@ python3 -m http.server 8080
 ```
 
 ## Performance Profiling
-
-```bash
-# Run Lighthouse desktop + mobile perf snapshots
-./scripts/perf-benchmark.sh http://127.0.0.1:8080
-```
 
 Runtime perf telemetry is exposed in-browser:
 
@@ -96,7 +90,7 @@ window.__seoulMapPerf.report()
 
 Enable full runtime perf instrumentation with `?perf=1`:
 
-```text
+```
 http://127.0.0.1:8080/?perf=1
 ```
 
@@ -104,13 +98,16 @@ http://127.0.0.1:8080/?perf=1
 
 | Input | Desktop | Mobile |
 |---|---|---|
-| Pan | Drag / WASD | One finger drag |
-| Rotate | Right-click drag | Two finger rotate |
-| Tilt | Middle-mouse drag | Two finger tilt |
+| Pan | Drag / WASD | One-finger drag |
+| Ascend / Descend | Space / Shift | — |
+| Rotate | Right-click drag | Two-finger rotate |
+| Tilt | Middle-mouse drag | Two-finger tilt |
 | Zoom | Scroll wheel | Pinch |
 | Location | — | 📍 button |
 | Reset view | ↺ button | ↺ button |
 | 3D toggle | 🏔️ button | 🏔️ button |
+| Layers | 🗺️ button | 🗺️ button |
+| Legend | 📋 button | 📋 button |
 
 ## License
 
